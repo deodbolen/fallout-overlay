@@ -16,10 +16,15 @@ import cairo
 import gi
 ROOT=Path(__file__).resolve().parent.parent
 # Bind to the VTE library already installed on Debian, with a project-local typelib.
-gi.require_version('GIRepository','2.0')
-from gi.repository import GIRepository
-GIRepository.Repository.prepend_search_path(str(ROOT/'vendor/typelib'))
-gi.require_version('Gtk','3.0'); gi.require_version('Vte','2.91')
+gi.require_version('Gtk','3.0')
+try:
+    gi.require_version('Vte','2.91')
+except ValueError:
+    # Compatibility fallback for existing installs; new installs use Debian's matching typelib.
+    gi.require_version('GIRepository','2.0')
+    from gi.repository import GIRepository
+    GIRepository.Repository.prepend_search_path(str(ROOT/'vendor/typelib'))
+    gi.require_version('Vte','2.91')
 gi.require_foreign('cairo')
 from gi.repository import Gtk,Gdk,GLib,Vte,Pango,GdkPixbuf
 from ssh_manager import atomic_json,state_dir

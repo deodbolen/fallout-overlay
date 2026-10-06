@@ -27,7 +27,17 @@ def restore_xml(c,path):
             elif t!='empty': setprop(c,p,el.attrib['value'],t)
             walk(el,p)
     reset(c,'/'); walk(ET.parse(path).getroot())
+def preflight():
+    if os.geteuid()==0: raise SystemExit('Run the desktop installer as your XFCE user, without sudo.')
+    if not os.environ.get('DISPLAY'): raise SystemExit('Run install.sh from a terminal inside your logged-in XFCE X11 session.')
+    required=['scripts/terminal.sh','scripts/bashrc','assets/navigator-background.svg','logo/pip-boy-logo.png','theme/gtk-3.0/gtk.css','fallout-sounds/fansound/ui_hacking_fanhum_lp.wav']
+    missing=[name for name in required if not (ROOT/name).is_file()]
+    if missing: raise SystemExit('Copy the complete Fallout-UI folder. Missing: '+', '.join(missing))
+    probe="import gi,cairo;gi.require_version('Gtk','3.0');gi.require_version('Vte','2.91');gi.require_version('Gst','1.0');from gi.repository import Gtk,Vte,Gst;Gst.init(None);assert Gst.ElementFactory.find('playbin')"
+    run(['/usr/bin/python3','-c',probe])
+
 def main():
+    if sys.argv[1]=='install': preflight()
     run(['xfconf-query','-c','xfce4-panel','-l']) # Fail before any writes if session unavailable.
     targets=['.config/xfce4/panel','.config/xfce4/terminal','.themes/Fallout-PipBoy']
     if sys.argv[1]=='restore':
@@ -88,7 +98,7 @@ def main():
             setprop('xfce4-desktop',p,str(ROOT/'logo/pip-boy-logo.png'))
             setprop('xfce4-desktop',p.rsplit('/',1)[0]+'/image-style',4,'int')
         if p.endswith('/image-style'): setprop('xfce4-desktop',p,4,'int')
-    command=str(ROOT/'scripts/terminal.sh'); key='F12'
+    command=__import__('shlex').quote(str(ROOT/'scripts/terminal.sh')); key='F12'
     for candidate in ('F12','<Primary><Alt>F12'):
         existing=query('xfce4-keyboard-shortcuts','/commands/custom/'+candidate)
         wm=query('xfce4-keyboard-shortcuts','/xfwm4/custom/'+candidate)

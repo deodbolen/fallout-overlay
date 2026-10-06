@@ -7,7 +7,7 @@ PS1='\[\e[1;92m\]\u@\h:\w > \[\e[0m\]'
 sudo() {
     if [ -n "$FALLOUT_SOUND_SOCKET" ] && [ "$#" -gt 0 ] && [[ "$1" != -* ]]; then
         command sudo -v || return $?
-        /usr/bin/python3 /home/bbolen/Fallout-UI/scripts/sound_event.py good
+        /usr/bin/python3 "${BASH_SOURCE[0]%/*}/sound_event.py" good
     fi
     command sudo "$@"
 }
