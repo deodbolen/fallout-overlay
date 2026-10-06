@@ -29,7 +29,7 @@ class SettingsTests(unittest.TestCase):
     def test_animation_has_separate_toggle(self):
         navigator=Navigator(Mock()); navigator.section=4
         with patch('crt_settings.running',return_value=True), patch('crt_settings.enabled',return_value=False), patch('crt_settings.animation_enabled',return_value=True):
-            self.assertEqual(navigator.rows()[2],['CRT overlay: Disabled','CRT scan animation: Enabled'])
+            self.assertEqual(navigator.rows()[2],['CRT overlay: Disabled','CRT scan animation: Enabled','Volume'])
         navigator.menu=Mock(return_value=0)
         with patch('crt_settings.set_animation') as toggle:
             navigator.activate('settings',1,[])

@@ -47,3 +47,15 @@ In embedded terminal sessions, **Ctrl+Shift+C** copies selected text, **Ctrl+Shi
 **Shift+Up/Down** extends or reduces a keyboard text selection from the terminal cursor by one line. Use **Ctrl+Shift+C** to copy it.
 
 Opening a GUI application from Applications, Open GUI, Open with, or a binary document automatically hides the navigator. **F12** brings it back; terminal sessions keep running.
+
+Sound files in `fallout-sounds` play through the installed GStreamer audio backend. The desktop CRT process owns a quiet looping fan hum and stops it on exit. Navigator typing uses charscroll, menu rows use focus/OK/cancel, section changes use Pip-Boy select plus randomized static, terminal switches use static, and F12 show/hide uses load. Playback is nonblocking, typing is rate limited, and sounds of the same kind cannot accumulate. Fan volume is 45%; effects are 85%.
+
+In new local Bash sessions, ordinary `sudo command` validates credentials first, plays passgood on successful validation, then runs the command. Cached credentials also count as accepted. The English sudo retry message “Sorry, try again.” triggers passbad. Option-led sudo forms retain their usual behavior and do not trigger passgood; localized retry messages and remote SSH authentication are not covered. Password input is never recorded or sent to the sound service.
+
+Pressing **Enter** (including numeric keypad Enter) inside a terminal session plays the menu confirmation sound and sends Enter to the running application normally.
+
+**Backspace** plays charscroll, including when deleting text in terminal sessions or navigator input fields. Escape retains the cancel sound.
+
+SSH Connect plays passgood immediately when OpenSSH enters its authenticated interactive session, and passbad on rejected authentication or connection failure. Password and key-based connections both have feedback, including reconnecting after a key push. A normal logout does not play failure. Verbose SSH diagnostics used for detection are suppressed; normal prompts and errors remain visible.
+
+**Settings → Volume** controls sound effects and fan hum separately. Up/Down selects a control, **+/-** adjusts by 5%, and **Enter** lets you type an exact percentage. **0%** mutes that group. Changes save immediately and update both the navigator and active fan within 250 ms. Escape returns.

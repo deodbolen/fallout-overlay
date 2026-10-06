@@ -23,6 +23,7 @@ gi.require_version('Gtk','3.0'); gi.require_version('Vte','2.91')
 gi.require_foreign('cairo')
 from gi.repository import Gtk,Gdk,GLib,Vte,Pango,GdkPixbuf
 from ssh_manager import atomic_json,state_dir
+from sounds import Sounds
 
 NAV_FONT='DejaVu Sans Mono 16'
 SHELL_FONT='DejaVu Sans Mono 14'
@@ -40,6 +41,7 @@ def color(value):
 
 class Host:
     def __init__(self,path,listener):
+        self.sounds=Sounds()
         self.path=path; self.listener=listener; self.records={}; self.current=None
         self.waiter=None; self.closed=False; self.nav_pid=None
         self.window=Gtk.Window(title='ROBCO TERMLINK')
@@ -73,7 +75,7 @@ class Host:
         self.stack.add_named(self.navigator,'navigator')
         env=dict(os.environ,FALLOUT_EMBEDDED_SOCKET=str(path),TERM='xterm-256color')
         self.spawn(self.navigator,[sys.executable,str(ROOT/'scripts/browser.py')],str(Path.home()),env,self.nav_spawned)
-        self.window.show_all(); self.show_navigator()
+        self.window.show_all(); self.show_navigator(); self.sounds.play('load')
         threading.Thread(target=self.serve,daemon=True).start()
         GLib.timeout_add(250,self.refresh)
 
@@ -83,6 +85,7 @@ class Host:
         terminal.connect('draw',self.draw_background)
         terminal.connect_after('draw',self.draw_static)
         terminal.connect('button-press-event',self.terminal_menu)
+        terminal.connect('key-press-event',self.typing_sound)
         terminal.set_font(Pango.FontDescription(font))
         terminal.set_color_foreground(color('#b6ffa3'))
         terminal.set_color_background(color('rgba(5,10,6,0)'))
@@ -115,6 +118,7 @@ class Host:
         return False
 
     def animate_session_switch(self):
+        self.sounds.play('static')
         self.static_until=time.monotonic()+.24
         self.stack.get_visible_child().queue_draw()
         if self.static_timer is None:
@@ -138,6 +142,20 @@ class Host:
         if error:
             print(error,file=sys.stderr); self.shutdown()
         else: self.nav_pid=pid
+
+    def typing_sound(self,widget,event):
+        if not event.state&(Gdk.ModifierType.CONTROL_MASK|Gdk.ModifierType.MOD1_MASK):
+            code=Gdk.keyval_to_unicode(event.keyval)
+            if event.keyval==Gdk.KEY_BackSpace or (code and chr(code).isprintable()): self.sounds.play('type')
+        return False
+
+    def sudo_feedback(self,widget):
+        # Only retry-message counts are retained; screen text is never logged.
+        text=widget.get_accessible().get_text(0,-1) or ''
+        count=text.count('Sorry, try again.')
+        previous=getattr(widget,'sudo_retry_count',0)
+        if count>previous: self.sounds.play('bad')
+        widget.sudo_retry_count=count
 
     def nav_keys(self,widget,event):
         if event.state&Gdk.ModifierType.CONTROL_MASK and event.keyval in (Gdk.KEY_m,Gdk.KEY_M):
@@ -187,6 +205,8 @@ class Host:
         widget.keyboard_selection_range=(anchor,end)
 
     def session_keys(self,widget,event):
+        if event.keyval in (Gdk.KEY_Return,Gdk.KEY_KP_Enter):
+            self.sounds.play('ok')
         if event.state&Gdk.ModifierType.SHIFT_MASK and not event.state&Gdk.ModifierType.CONTROL_MASK and event.keyval in (Gdk.KEY_Up,Gdk.KEY_Down):
             self.keyboard_selection(widget,-1 if event.keyval==Gdk.KEY_Up else 1)
             return True
@@ -214,13 +234,14 @@ class Host:
         terminal=self.terminal(EDITOR_FONT if action=='editor' else SHELL_FONT)
         terminal.connect('key-press-event',self.session_keys)
         terminal.connect('child-exited',lambda widget,status: self.child_exited(sid,status))
+        terminal.connect('contents-changed',self.sudo_feedback)
         record={'id':sid,'label':label,'action':action,'path':path,'terminal':terminal,'pid':None,'closed':False,'font':EDITOR_FONT if action=='editor' else SHELL_FONT}
         self.records[sid]=record; self.stack.add_named(terminal,sid); terminal.show()
         def spawned(widget,pid,error,*args):
             if error:
                 record['closed']=True; terminal.feed(('Cannot start terminal: '+str(error)).encode())
             else: record['pid']=pid
-        env=dict(os.environ,TERM='xterm-256color')
+        env=dict(os.environ,TERM='xterm-256color',FALLOUT_SOUND_SOCKET=str(self.path))
         env.pop('FALLOUT_EMBEDDED_SOCKET',None)
         self.spawn(terminal,[sys.executable,str(ROOT/'scripts/session.py'),str(path)],str(details.get('cwd',Path.home())),env,spawned)
         return {'id':sid,'label':label}
@@ -259,6 +280,7 @@ class Host:
 
     def refresh(self):
         if self.closed: return False
+        self.sounds.refresh()
         for record in self.records.values():
             if record['closed']: continue
             try: data=json.loads(record['path'].read_text())
@@ -308,9 +330,12 @@ class Host:
                         elif command=='attach':
                             if self.waiter: raise ValueError('A terminal is already attached.')
                             self.show_session(request['id']); self.waiter=reply
+                        elif command=='sound':
+                            self.sounds.play(request.get('event','')); reply({})
                         elif command=='hide':
                             self.window.hide(); reply({})
                         elif command=='toggle':
+                            self.sounds.play('load')
                             if self.window.get_visible(): self.window.hide()
                             else: self.window.show(); self.window.present()
                             reply({})
@@ -350,6 +375,7 @@ class Host:
         if self.closed: return
         for sid in list(self.records): self.close_session(sid)
         self.closed=True
+        self.sounds.close()
         self.listener.close(); self.path.unlink(missing_ok=True)
         if self.nav_pid:
             try: os.killpg(self.nav_pid,signal.SIGHUP)

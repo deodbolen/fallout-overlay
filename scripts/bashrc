@@ -1,3 +1,13 @@
 [ -f "$HOME/.bashrc" ] && . "$HOME/.bashrc"
 printf '\033[1;92mROBCO INDUSTRIES (TM) TERMLINK\n%s | %s\nHOME %s\033[0m\n' "$(hostname)" "$(uptime -p)" "$HOME"
 PS1='\[\e[1;92m\]\u@\h:\w > \[\e[0m\]'
+
+# Validate first for ordinary sudo commands so acceptance is independent of the command exit status.
+# Option-heavy/admin modes retain their normal sudo behavior.
+sudo() {
+    if [ -n "$FALLOUT_SOUND_SOCKET" ] && [ "$#" -gt 0 ] && [[ "$1" != -* ]]; then
+        command sudo -v || return $?
+        /usr/bin/python3 /home/bbolen/Fallout-UI/scripts/sound_event.py good
+    fi
+    command sudo "$@"
+}

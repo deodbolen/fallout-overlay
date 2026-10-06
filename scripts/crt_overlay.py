@@ -15,6 +15,7 @@ gi.require_foreign('cairo')
 from gi.repository import Gtk, Gdk, GLib, GdkX11
 from x11_input import make_click_through
 from crt_scan import draw_scan
+from sounds import Sounds
 
 SPACING=4
 OPACITY=0.065
@@ -107,6 +108,8 @@ def main():
         for i in range(display.get_n_monitors()):
             window=Overlay(display.get_monitor(i).get_geometry(),static,animation); window.show_all(); windows.append(window)
     rebuild()
+    sounds=Sounds(); sounds.play('fan',loop=True)
+    GLib.timeout_add(250,sounds.refresh)
     screen.connect('monitors-changed',rebuild)
     if animation:
         def animate():
@@ -135,6 +138,7 @@ def main():
         GLib.timeout_add_seconds(3,stop)
     try: Gtk.main()
     finally:
+        sounds.close()
         for window in windows: window.destroy()
         pidfile.unlink(missing_ok=True)
         lock.close()

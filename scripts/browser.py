@@ -37,6 +37,7 @@ from ssh_manager import Catalog, username, generate_path, remote_directory
 from terminal_sessions import Sessions
 from path_completion import directory_matches, complete_directory
 import crt_settings
+import sound_settings
 from section_transition import animate as animate_section
 from file_actions import source_file, new_name, destination, copy_file, move_file, compress_file, file_info, create_entry
 import configparser
@@ -67,15 +68,27 @@ class Navigator:
         self.apps=None
         self.transition_pending=False
 
+    def sound(self,event):
+        if os.environ.get('FALLOUT_EMBEDDED_SOCKET'):
+            from embedded_client import request
+            request('sound',event=event)
+
+    def navigation_sound(self,key):
+        if key in (curses.KEY_UP,curses.KEY_DOWN): self.sound('focus')
+        elif key in ENTER: self.sound('ok')
+        elif key=='\x1b': self.sound('cancel')
+
     def switch_section(self,key):
         if key not in (curses.KEY_LEFT,curses.KEY_RIGHT): return False
         step=1 if key==curses.KEY_RIGHT else -1
         self.section=(self.section+step)%len(self.sections)
+        self.sound('static'); self.sound('select')
         self.transition_pending=True
         return True
 
     def menu_key(self):
         key=self.screen.get_wch()
+        self.navigation_sound(key)
         if self.switch_section(key): raise SectionChanged()
         return key
 
@@ -273,7 +286,7 @@ class Navigator:
         if self.section==4:
             status='Enabled' if crt_settings.running() and crt_settings.enabled() else 'Disabled'
             animation='Enabled' if crt_settings.running() and crt_settings.animation_enabled() else 'Disabled'
-            return 'settings','⚙ SETTINGS',['CRT overlay: '+status,'CRT scan animation: '+animation],[]
+            return 'settings','⚙ SETTINGS',['CRT overlay: '+status,'CRT scan animation: '+animation,'Volume'],[]
         if self.apps is None: self.apps=self.applications()
         return 'apps','APPLICATIONS',[a['name'] for a in self.apps] or ['No applications'],self.apps
 
@@ -408,6 +421,30 @@ class Navigator:
         elif choice==8: self.open_gui(path)
         elif choice==9: self.open_with(path)
 
+    def volume_settings(self):
+        index=0
+        fields=['effects_volume','fan_volume']
+        while True:
+            levels=sound_settings.levels()
+            labels=['Sound effects: '+str(levels['effects_volume'])+'%','Fan hum: '+str(levels['fan_volume'])+'%','Back']
+            self.draw('VOLUME',labels,index,'↑↓ SELECT  +/- ADJUST  ENTER SET LEVEL  ESC BACK',self.message or '0% mutes. Changes save and apply immediately.')
+            key=self.menu_key()
+            if key==curses.KEY_UP: index=max(0,index-1)
+            elif key==curses.KEY_DOWN: index=min(2,index+1)
+            elif key in ('\x1b',curses.KEY_BACKSPACE,'\x7f'): return
+            elif key in ('+','=', '-') and index<2:
+                field=fields[index]
+                sound_settings.save(field,max(0,min(100,levels[field]+(5 if key in ('+','=') else -5))))
+            elif key in ENTER:
+                if index==2: return
+                field=fields[index]
+                value=self.text('VOLUME 0–100 (%)',str(levels[field]))
+                if value is not None:
+                    try:
+                        sound_settings.save(field,value)
+                        self.message='Volume saved.'
+                    except (ValueError,TypeError): self.message='Enter a number from 0 to 100.'
+
     def activate(self,page,index,items):
         if page=='home':
             path,depth,directory=items[index]
@@ -437,6 +474,8 @@ class Navigator:
                         session.close(); self.sessions.items.remove(session)
                 else: self.attach_session(session)
         elif page=='settings':
+            if index==2:
+                self.volume_settings(); return
             label='CRT OVERLAY' if index==0 else 'CRT SCAN ANIMATION'
             detail='Faint static scanlines.' if index==0 else 'Five faint phosphor scan lines; one sweep every 12 seconds.'
             choice=self.menu(label,['Enable','Disable','Cancel'],detail=detail+' Clicks pass through.')
@@ -474,6 +513,7 @@ class Navigator:
                     try: key=self.screen.get_wch()
                     except curses.error: continue
                     self.message=''
+                    self.navigation_sound(key)
                     if self.switch_section(key): pass
                     elif key in (curses.KEY_DOWN,'j'): self.selected[page]=min(len(labels)-1,index+1)
                     elif key in (curses.KEY_UP,'k'): self.selected[page]=max(0,index-1)

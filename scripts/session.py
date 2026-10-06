@@ -6,21 +6,31 @@ from pathlib import Path
 import subprocess
 import sys
 import threading
+from sound_event import emit as sound
 from ssh_manager import Catalog, atomic_json, ssh_args, public_key, remote_command, generate_path
 
 
 def interactive_ssh(args):
-    errors=[]
-    proc=subprocess.Popen(args,stderr=subprocess.PIPE)
+    errors=[]; feedback={'good':False,'bad':False}
+    # OpenSSH's diagnostic channel confirms authentication/session establishment.
+    # Keep normal prompts/messages, discard verbose diagnostics after inspecting them.
+    command=[args[0],'-v',*args[1:]]
+    try: proc=subprocess.Popen(command,stderr=subprocess.PIPE)
+    except OSError:
+        sound('bad'); raise
     def relay():
-        while True:
-            chunk=os.read(proc.stderr.fileno(),4096)
-            if not chunk: break
-            os.write(2,chunk)
-            errors.append(chunk)
+        for line in iter(proc.stderr.readline,b''):
+            if b'Entering interactive session.' in line and not feedback['good']:
+                sound('good'); feedback['good']=True
+            if line.startswith((b'debug1:',b'debug2:',b'debug3:')): continue
+            os.write(2,line)
+            errors.append(line)
             if sum(map(len,errors))>65536: errors.pop(0)
+            if b'Permission denied' in line:
+                sound('bad'); feedback['bad']=True
     thread=threading.Thread(target=relay); thread.start()
-    code=proc.wait(); thread.join()
+    code=proc.wait(); thread.join(); proc.stderr.close()
+    if (code==255 or not feedback['good']) and not feedback['bad']: sound('bad')
     return code,b''.join(errors).decode(errors='replace')
 
 
@@ -37,14 +47,14 @@ def push(host,key,directory):
 
 
 def connect(host,key):
-    if not key: return subprocess.call(ssh_args(host,password_only=True))
+    if not key: return interactive_ssh(ssh_args(host,password_only=True))[0]
     code,errors=interactive_ssh(ssh_args(host,key,key_only=True))
     if code==255 and 'Permission denied' in errors:
         choice=input('\nKey authentication failed. Push this public key? [y/N] ').strip().lower()
         if choice=='y':
             directory=input('Remote SSH directory [~/.ssh]: ').strip() or '~/.ssh'
             if push(host,key,directory)==0:
-                return subprocess.call(ssh_args(host,key,key_only=True))
+                return interactive_ssh(ssh_args(host,key,key_only=True))[0]
         else: print('Connection cancelled. Host and key were not changed.')
     elif code==255: print('\nSSH could not connect. Check the address, network, and host-key messages above.')
     return code
