@@ -1,0 +1,24 @@
+@import url("resource:///org/gtk/libgtk/theme/Adwaita/gtk-contained-dark.css");
+@define-color theme_bg_color #08110b;
+@define-color theme_fg_color #b6ffa3;
+@define-color theme_base_color #050a06;
+@define-color theme_text_color #b6ffa3;
+@define-color theme_selected_bg_color #347a40;
+@define-color theme_selected_fg_color #d5ffd0;
+window, dialog, .background { background-color: #08110b; color: #b6ffa3; }
+entry, textview text, treeview { background-color: #050a06; color: #b6ffa3; }
+button { color: #b6ffa3; }
+button:hover, button:checked { background: #347a40; }
+*:focus { outline-color: #9dff72; }
+.xfce4-panel { background: #050a06; color: #9dff72; font-family: "DejaVu Sans Mono"; font-size: 15px; }
+.xfce4-panel button { background: transparent; border: 0; box-shadow: none; padding: 0 4px; }
+.xfce4-panel button:hover, .xfce4-panel button:checked { background: #347a40; }
+
+/* Keep the navigator free of notebook accent lines and window borders. */
+#xfce4-terminal-dropdown, #xfce4-terminal-dropdown decoration,
+#xfce4-terminal-notebook { border: 0; box-shadow: none; }
+#xfce4-terminal-notebook > header > tabs > tab:checked {
+  border: 0;
+  box-shadow: none;
+  background-image: none;
+}

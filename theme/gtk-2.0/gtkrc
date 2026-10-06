@@ -1,0 +1,10 @@
+include "/usr/share/themes/Adwaita-dark/gtk-2.0/gtkrc"
+style "fallout" {
+ bg[NORMAL] = "#08110b"
+ fg[NORMAL] = "#b6ffa3"
+ base[NORMAL] = "#050a06"
+ text[NORMAL] = "#b6ffa3"
+ bg[SELECTED] = "#347a40"
+ fg[SELECTED] = "#d5ffd0"
+}
+class "*" style "fallout"
