@@ -87,11 +87,39 @@ class Host:
         self.navigator.connect('key-press-event',self.nav_keys)
         self.navigator.connect('child-exited',self.nav_exited)
         self.stack.add_named(self.navigator,'navigator')
+        self.power_button=Gtk.Button(label='⏻ Power')
+        self.power_button.set_name('home-power')
+        self.power_button.set_halign(Gtk.Align.END); self.power_button.set_valign(Gtk.Align.END)
+        self.power_button.set_margin_end(16); self.power_button.set_margin_bottom(8)
+        self.power_button.set_no_show_all(True)
+        self.power_button.set_tooltip_text('Sleep, log out, restart or shut down')
+        self.power_button.connect('clicked',self.open_power_menu)
+        overlay.add_overlay(self.power_button)
+        self.stack.connect('notify::visible-child-name',lambda *args: self.update_power_button())
         env=dict(os.environ,FALLOUT_EMBEDDED_SOCKET=str(path),TERM='xterm-256color')
         self.spawn(self.navigator,[sys.executable,str(ROOT/'scripts/browser.py')],str(Path.home()),env,self.nav_spawned)
         self.window.show_all(); self.show_navigator(); self.sounds.play('load')
         threading.Thread(target=self.serve,daemon=True).start()
         GLib.timeout_add(250,self.refresh)
+
+    def update_power_button(self):
+        self.power_button.set_visible(bool(self.clock_value) and self.stack.get_visible_child_name()=='navigator')
+
+    def open_power_menu(self,button):
+        # Use XFCE's session dialog so power actions follow the desktop's policies.
+        try:
+            pid,_,_,_=GLib.spawn_async(['xfce4-session-logout'],flags=GLib.SpawnFlags.SEARCH_PATH|GLib.SpawnFlags.DO_NOT_REAP_CHILD)
+        except GLib.Error as error:
+            dialog=Gtk.MessageDialog(transient_for=self.window,modal=True,message_type=Gtk.MessageType.ERROR,buttons=Gtk.ButtonsType.CLOSE,text='Could not open the power menu')
+            dialog.format_secondary_text(str(error)); dialog.run(); dialog.destroy()
+            return
+        self.window.hide()
+        def finished(pid,status):
+            GLib.spawn_close_pid(pid)
+            if not self.closed:
+                self.window.show(); self.window.present()
+                self.navigator.grab_focus()
+        GLib.child_watch_add(pid,finished)
 
     def terminal(self,font):
         terminal=Vte.Terminal()
@@ -379,6 +407,7 @@ class Host:
                         if command=='launch': reply(self.launch(request['action'],request['label'],request.get('details',{})))
                         elif command=='clock':
                             self.clock_value=str(request.get('value',''))[:5]
+                            self.update_power_button()
                             self.navigator.queue_draw(); reply({})
                         elif command=='choose_application': reply({'path':self.choose_application(request.get('initial',''))})
                         elif command=='status': reply({'status':self.status(self.records[request['id']])})
