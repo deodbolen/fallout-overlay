@@ -1,5 +1,9 @@
 #!/usr/bin/python3
 """Real VTE GUI smoke test, isolated documents and state; closes itself."""
+if __name__ != '__main__':
+    import unittest
+    raise unittest.SkipTest('Run directly from an XFCE session; this test opens a GTK window.')
+
 import os
 from pathlib import Path
 import socket

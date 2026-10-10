@@ -74,8 +74,9 @@ class FileActionsTests(unittest.TestCase):
     def test_binary_document_opens_external_viewer(self):
         binary=self.root/'image.png'; binary.write_bytes(b'\x89PNG\x00')
         navigator=Navigator(Mock()); navigator.launch=Mock()
-        with patch('browser.subprocess.Popen') as launch:
+        with patch('browser.subprocess.Popen') as launch, patch.object(navigator, 'hide_for_application') as hide:
             navigator.open_document(binary)
+            hide.assert_called_once()
             self.assertEqual(launch.call_args.args[0],['xdg-open',str(binary)])
         navigator.launch.assert_not_called()
 
@@ -83,7 +84,7 @@ class FileActionsTests(unittest.TestCase):
         navigator=Navigator(Mock())
         executable=self.root/'application with spaces'
         executable.write_text('#!/bin/sh\n'); executable.chmod(0o700)
-        with patch('browser.subprocess.Popen') as launch:
+        with patch('browser.subprocess.Popen') as launch, patch.object(navigator, 'hide_for_application') as hide:
             navigator.open_gui(self.source)
             self.assertEqual(launch.call_args.args[0],['xdg-open',str(self.source)])
             navigator.open_gui(self.source,str(executable))
@@ -92,6 +93,7 @@ class FileActionsTests(unittest.TestCase):
             with self.assertRaises(ValueError): navigator.open_gui(self.source,str(executable))
             with self.assertRaises(ValueError): navigator.open_gui(self.source,'mousepad')
             self.assertEqual(launch.call_count,2)
+            self.assertEqual(hide.call_count,2)
 
     def test_open_with_cancel_does_not_launch(self):
         navigator=Navigator(Mock()); navigator.menu=Mock(return_value=None)

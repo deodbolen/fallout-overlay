@@ -5,33 +5,7 @@ import os
 from pathlib import Path
 import subprocess
 
-class Tree:
-    def __init__(self, root):
-        self.root = Path(root)
-        self.expanded = set()
-        self.hidden = False
-        self.message = ''
-
-    def rows(self):
-        rows = []
-        def visit(path, depth, ancestors):
-            directory = path.is_dir()
-            rows.append((path, depth, directory))
-            if not directory or path not in self.expanded:
-                return
-            try:
-                real = path.resolve()
-                if real in ancestors:
-                    self.message = 'Symlink cycle: cannot expand this directory.'
-                    return
-                children = sorted(path.iterdir(), key=lambda p: (not p.is_dir(), p.name.casefold()))
-                for child in children:
-                    if self.hidden or not child.name.startswith('.'):
-                        visit(child, depth + 1, ancestors | {real})
-            except OSError as error:
-                self.message = str(error)
-        visit(self.root, 0, set())
-        return rows
+from navigator_tree import Tree
 
 from ssh_manager import Catalog, username, generate_path, remote_directory
 from terminal_sessions import Sessions

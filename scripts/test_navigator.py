@@ -62,6 +62,20 @@ class NavigatorTests(unittest.TestCase):
             self.assertEqual(len(tree.rows()),3)
             tree.hidden=True; self.assertEqual(len(tree.rows()),4)
 
+    def test_tree_sorts_directories_first_and_keeps_broken_links(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            (root/'z-dir').mkdir()
+            (root/'A-file').write_text('text')
+            (root/'broken-link').symlink_to(root/'missing')
+            (root/'.hidden').write_text('hidden')
+            tree=Tree(root); tree.expanded={root}
+            rows=tree.rows()
+            self.assertEqual([path.name for path, _, _ in rows[1:]],
+                             ['z-dir', 'A-file', 'broken-link'])
+            self.assertEqual([directory for _, _, directory in rows],
+                             [True, True, False, False])
+
     def test_auth_failure_offers_push_but_network_failure_does_not(self):
         from session import connect
         host={'name':'lab','address':'example.org','user':''}

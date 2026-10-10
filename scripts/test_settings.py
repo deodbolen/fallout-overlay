@@ -10,7 +10,7 @@ import crt_settings
 
 class SettingsTests(unittest.TestCase):
     def test_right_navigation_reaches_settings(self):
-        navigator=Navigator(Mock())
+        navigator=Navigator(Mock()); navigator.sound=Mock()
         for expected in (1,2,3,4,0):
             navigator.switch_section(curses.KEY_RIGHT)
             self.assertEqual(navigator.section,expected)
