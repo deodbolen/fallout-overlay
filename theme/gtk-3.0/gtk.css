@@ -10,6 +10,13 @@ entry, textview text, treeview { background-color: #050a06; color: #b6ffa3; }
 button { color: #b6ffa3; }
 button:hover, button:checked { background: #347a40; }
 *:focus { outline-color: #9dff72; }
+/* Installed with the theme by install.sh; override Adwaita's keycap surface. */
+.xfsm-logout-dialog, .xfsm-logout-dialog.background {
+  background-color: #000000;
+  background-image: none;
+  color: #9dff72;
+}
+.xfsm-logout-dialog label { color: #9dff72; }
 .xfce4-panel { background: #050a06; color: #9dff72; font-family: "DejaVu Sans Mono"; font-size: 15px; }
 .xfce4-panel button { background: transparent; border: 0; box-shadow: none; padding: 0 4px; }
 .xfce4-panel button:hover, .xfce4-panel button:checked { background: #347a40; }
