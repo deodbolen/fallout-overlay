@@ -127,7 +127,7 @@ class Host:
         font.set_absolute_size(100*factor*Pango.SCALE)
         layout.set_font_description(font)
         ink,_=layout.get_pixel_extents()
-        x=max(0,(size.width-ink.width)/2-2*cell_w)-ink.x
+        x=max(0,(size.width-ink.width)/2-6*cell_w)-ink.x
         y=3*cell_h+max(0,(size.height-7*cell_h-ink.height)/2)-ink.y
         context.save(); context.set_source_rgb(182/255,1,163/255)
         context.move_to(x,y); PangoCairo.show_layout(context,layout); context.restore()
