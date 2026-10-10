@@ -108,7 +108,7 @@ class Navigator:
             lines=clock_lines(value,max(1,w-5),height)
             top=3+max(0,(h-7-len(lines))//2)
             for offset,line in enumerate(lines):
-                left=max(0,(w-1-len(line))//2-6)
+                left=max(0,(w-1-len(line))//2-10)
                 self.put(top+offset,' '*left+line)
         date=now.strftime('%A, %B %d, %Y')
         self.put(h-2,date.center(max(1,w-1)))
