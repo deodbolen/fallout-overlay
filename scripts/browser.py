@@ -76,6 +76,7 @@ class Navigator:
             except curses.error: pass
 
     def draw(self,title,labels,selected=0,footer='←→ SECTION  ↑↓ ITEM  ENTER OPEN  ESC BACK',detail='',refresh=True):
+        if refresh: self.native_clock('')
         h,w=self.screen.getmaxyx(); self.screen.erase()
         tabs='   '.join(('[  '+s+'  ]' if s=='⚙️' else '['+s+']') if i==self.section else s for i,s in enumerate(self.sections))
         self.put(0,'ROBCO TERMLINK // '+tabs,curses.A_BOLD)
@@ -87,16 +88,28 @@ class Navigator:
         self.put(h-1,footer)
         if refresh: self.screen.refresh()
 
+    def native_clock(self,value):
+        if not os.environ.get('FALLOUT_EMBEDDED_SOCKET'): return False
+        if getattr(self,'clock_value',None)!=value:
+            from embedded_client import request
+            request('clock',value=value)
+            self.clock_value=value
+        return True
+
     def draw_clock(self):
         now=datetime.now()
         # Present the frame only after the digits are drawn, avoiding a blank flash.
         self.draw('LOCAL TIME',[],footer='←→ CHANGE SECTION  Q EXIT',detail=' ',refresh=False)
         h,w=self.screen.getmaxyx()
-        lines=clock_lines(now.strftime('%H:%M'),max(1,w-5),max(1,h-7))
-        top=3+max(0,(h-7-len(lines))//2)
-        for offset,line in enumerate(lines):
-            left=max(0,(w-1-len(line))//2-2)
-            self.put(top+offset,' '*left+line)
+        value=now.strftime('%H:%M')
+        if not self.native_clock(value):
+            # Keep the standalone terminal fallback at the original clock height.
+            height=5*max(1,min(max(1,h-7)//5,max(1,w-1)//27//2))
+            lines=clock_lines(value,max(1,w-5),height)
+            top=3+max(0,(h-7-len(lines))//2)
+            for offset,line in enumerate(lines):
+                left=max(0,(w-1-len(line))//2-2)
+                self.put(top+offset,' '*left+line)
         date=now.strftime('%A, %B %d, %Y')
         self.put(h-2,date.center(max(1,w-1)))
         self.screen.refresh()

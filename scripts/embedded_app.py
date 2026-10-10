@@ -26,7 +26,7 @@ except ValueError:
     GIRepository.Repository.prepend_search_path(str(ROOT/'vendor/typelib'))
     gi.require_version('Vte','2.91')
 gi.require_foreign('cairo')
-from gi.repository import Gtk,Gdk,GLib,Vte,Pango,GdkPixbuf
+from gi.repository import Gtk,Gdk,GLib,Vte,Pango,PangoCairo,GdkPixbuf
 from ssh_manager import atomic_json,state_dir
 from sounds import Sounds
 
@@ -74,7 +74,9 @@ class Host:
         css=Gtk.CssProvider()
         css.load_from_data(b'window { background: #050a06; color: #b6ffa3; } vte-terminal { background: transparent; } label { color: #b6ffa3; } #session-reminder { font-family: \"DejaVu Sans Mono\"; font-size: 11pt; }')
         Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(),css,Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        self.clock_value=''
         self.navigator=self.terminal(NAV_FONT)
+        self.navigator.connect_after('draw',self.draw_clock)
         self.navigator.connect('key-press-event',self.nav_keys)
         self.navigator.connect('child-exited',self.nav_exited)
         self.stack.add_named(self.navigator,'navigator')
@@ -106,6 +108,29 @@ class Host:
         context.set_source_rgb(5/255,10/255,6/255); context.paint()
         context.save(); context.scale(size.width/self.pixbuf.get_width(),size.height/self.pixbuf.get_height())
         Gdk.cairo_set_source_pixbuf(context,self.pixbuf,0,0); context.paint(); context.restore()
+        return False
+
+    def draw_clock(self,widget,context):
+        if not self.clock_value: return False
+        size=widget.get_allocation()
+        cell_w=max(1,widget.get_char_width()); cell_h=max(1,widget.get_char_height())
+        columns=max(1,size.width//cell_w); rows=max(1,size.height//cell_h)
+        # Match the first clock's five-row glyphs and original scaling limits.
+        scale=max(1,min(max(1,rows-7)//5,columns//27//2))
+        target_h=min(5*scale*cell_h,max(1,size.height-7*cell_h))
+        layout=widget.create_pango_layout(self.clock_value)
+        font=Pango.FontDescription('DejaVu Sans Book')
+        font.set_absolute_size(100*Pango.SCALE)
+        layout.set_font_description(font)
+        ink,_=layout.get_pixel_extents()
+        factor=min(target_h/max(1,ink.height),max(1,size.width-5*cell_w)/max(1,ink.width))
+        font.set_absolute_size(100*factor*Pango.SCALE)
+        layout.set_font_description(font)
+        ink,_=layout.get_pixel_extents()
+        x=max(0,(size.width-ink.width)/2-2*cell_w)-ink.x
+        y=3*cell_h+max(0,(size.height-7*cell_h-ink.height)/2)-ink.y
+        context.save(); context.set_source_rgb(182/255,1,163/255)
+        context.move_to(x,y); PangoCairo.show_layout(context,layout); context.restore()
         return False
 
     def draw_static(self,widget,context):
@@ -329,6 +354,9 @@ class Host:
                     try:
                         command=request['command']
                         if command=='launch': reply(self.launch(request['action'],request['label'],request.get('details',{})))
+                        elif command=='clock':
+                            self.clock_value=str(request.get('value',''))[:5]
+                            self.navigator.queue_draw(); reply({})
                         elif command=='choose_application': reply({'path':self.choose_application(request.get('initial',''))})
                         elif command=='status': reply({'status':self.status(self.records[request['id']])})
                         elif command=='close': self.close_session(request['id']); reply({})
