@@ -27,6 +27,52 @@ def restore_xml(c,path):
             elif t!='empty': setprop(c,p,el.attrib['value'],t)
             walk(el,p)
     reset(c,'/'); walk(ET.parse(path).getroot())
+def desktop_shortcuts(restore=False):
+    archive=BACKUP/'desktop-shortcuts'
+    if restore:
+        if not archive.exists(): return
+        for record in archive.glob('*/location.json'):
+            dest=pathlib.Path(json.loads(record.read_text())['path'])
+            source=record.parent/'shortcut'
+            if (source.exists() or source.is_symlink()) and not (dest.exists() or dest.is_symlink()):
+                dest.parent.mkdir(parents=True,exist_ok=True)
+                shutil.move(str(source),str(dest))
+        return
+    result=run(['xdg-user-dir','DESKTOP'])
+    desktop=pathlib.Path(result.stdout.strip())
+    # XDG can disable the desktop by pointing it at the home directory.
+    if not desktop.is_absolute() or desktop==HOME or not desktop.is_dir(): return
+    import uuid
+    for source in desktop.iterdir():
+        if not (source.is_symlink() or (source.is_file() and source.suffix=='.desktop')): continue
+        folder=archive/uuid.uuid4().hex
+        folder.mkdir(parents=True)
+        (folder/'location.json').write_text(json.dumps({'path':str(source)}))
+        shutil.move(str(source),str(folder/'shortcut'))
+
+def desktop_background():
+    props=run(['xfconf-query','-c','xfce4-desktop','-l']).stdout.splitlines()
+    bases={p.rsplit('/',1)[0] for p in props if p.startswith('/backdrop/') and p.endswith(('/last-image','/image-path','/image-style'))}
+    # Include connected outputs even when xfdesktop has not created their settings yet.
+    outputs=run(['xrandr','--query'],False).stdout.splitlines()
+    count=query('xfwm4','/general/workspace_count')
+    try: workspaces=max(1,int(count.stdout.strip()))
+    except ValueError: workspaces=1
+    for line in outputs:
+        fields=line.split()
+        if len(fields)>1 and fields[1]=='connected':
+            for workspace in range(workspaces):
+                bases.add('/backdrop/screen0/monitor'+fields[0]+'/workspace'+str(workspace))
+    for base in bases:
+        setprop('xfce4-desktop',base+'/last-image',str(ROOT/'logo/pip-boy-logo.png'))
+        if base+'/image-path' in props:
+            setprop('xfce4-desktop',base+'/image-path',str(ROOT/'logo/pip-boy-logo.png'))
+        setprop('xfce4-desktop',base+'/image-style',4,'int')
+        setprop('xfce4-desktop',base+'/backdrop-cycle-enable',False,'bool')
+    # Hide XFCE's built-in Home, Trash and device icons as well.
+    setprop('xfce4-desktop','/desktop-icons/style',0,'int')
+    desktop_shortcuts()
+
 def preflight():
     if os.geteuid()==0: raise SystemExit('Run the desktop installer as your XFCE user, without sudo.')
     if not os.environ.get('DISPLAY'): raise SystemExit('Run install.sh from a terminal inside your logged-in XFCE X11 session.')
@@ -55,6 +101,7 @@ def main():
                 src=BACKUP/'files'/str(i)
                 if src.is_dir(): shutil.copytree(src,dest)
                 else: shutil.copy2(src,dest)
+        desktop_shortcuts(restore=True)
         subprocess.Popen(['xfce4-panel'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,start_new_session=True)
         print('Original XFCE configuration restored. Log out/in to refresh existing application windows.'); return
     # Never overwrite original baseline on repeat install.
@@ -91,13 +138,7 @@ def main():
     setprop('xsettings','/Gtk/FontName','DejaVu Sans 12')
     setprop('xfwm4','/general/title_font','DejaVu Sans Bold 12')
     setprop('xfwm4','/general/theme','Fallout-PipBoy')
-    # Update all existing monitor/workspace wallpaper properties.
-    props=run(['xfconf-query','-c','xfce4-desktop','-l']).stdout.splitlines()
-    for p in props:
-        if p.endswith(('/last-image','/image-path')):
-            setprop('xfce4-desktop',p,str(ROOT/'logo/pip-boy-logo.png'))
-            setprop('xfce4-desktop',p.rsplit('/',1)[0]+'/image-style',4,'int')
-        if p.endswith('/image-style'): setprop('xfce4-desktop',p,4,'int')
+    desktop_background()
     command=__import__('shlex').quote(str(ROOT/'scripts/terminal.sh')); key='F12'
     for candidate in ('F12','<Primary><Alt>F12'):
         existing=query('xfce4-keyboard-shortcuts','/commands/custom/'+candidate)

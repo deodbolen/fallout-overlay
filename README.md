@@ -15,6 +15,8 @@ Tested on **Debian 13, XFCE, X11**. Copy the entire project to a permanent direc
 
 Run as your normal user. The installer uses sudo only for missing Debian packages and checks GTK, VTE, and audio support before changing desktop settings. Keep the project directory in place: desktop launchers and wallpaper reference its files.
 
+Installation sets the Pip-Boy wallpaper on connected monitors and workspaces, disables wallpaper cycling, and hides desktop icons. Desktop launchers (`.desktop` files) and symbolic links are moved into the backup; ordinary files and folders are kept. Restore returns removed shortcuts when their original paths are unoccupied.
+
 Press **F12** to show or hide the navigator. If F12 already has a custom binding, the installer uses **Ctrl+Alt+F12**.
 
 Restore the captured desktop configuration with:
