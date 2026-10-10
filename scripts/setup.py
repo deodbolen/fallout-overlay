@@ -64,10 +64,11 @@ def desktop_background():
             for workspace in range(workspaces):
                 bases.add('/backdrop/screen0/monitor'+fields[0]+'/workspace'+str(workspace))
     for base in bases:
-        setprop('xfce4-desktop',base+'/last-image',str(ROOT/'logo/pip-boy-logo.png'))
+        setprop('xfce4-desktop',base+'/last-image',str(ROOT/'assets/navigator-background.svg'))
         if base+'/image-path' in props:
-            setprop('xfce4-desktop',base+'/image-path',str(ROOT/'logo/pip-boy-logo.png'))
-        setprop('xfce4-desktop',base+'/image-style',4,'int')
+            setprop('xfce4-desktop',base+'/image-path',str(ROOT/'assets/navigator-background.svg'))
+        # Stretch the complete composition just like the terminal background.
+        setprop('xfce4-desktop',base+'/image-style',3,'int')
         setprop('xfce4-desktop',base+'/backdrop-cycle-enable',False,'bool')
     # Hide XFCE's built-in Home, Trash and device icons as well.
     setprop('xfce4-desktop','/desktop-icons/style',0,'int')
