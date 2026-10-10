@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Keyboard directory tree for the RobCo drop-down terminal."""
 import curses
+from datetime import datetime
+from digital_clock import clock_lines
 import os
 from pathlib import Path
 import subprocess
@@ -35,7 +37,7 @@ class Navigator:
             self.sessions=EmbeddedSessions()
         else: self.sessions=Sessions()
         self.section=0
-        self.sections=['HOME','SSH','TERMINAL','APPLICATIONS','⚙️']
+        self.sections=['HOME','DATA','SSH','TERMINAL','APPLICATIONS','⚙️']
         self.page='ssh'
         self.selected={}
         self.message=''
@@ -75,7 +77,7 @@ class Navigator:
 
     def draw(self,title,labels,selected=0,footer='←→ SECTION  ↑↓ ITEM  ENTER OPEN  ESC BACK',detail=''):
         h,w=self.screen.getmaxyx(); self.screen.erase()
-        tabs='   '.join(('[  '+s+'  ]' if i==4 else '['+s+']') if i==self.section else s for i,s in enumerate(self.sections))
+        tabs='   '.join(('[  '+s+'  ]' if s=='⚙️' else '['+s+']') if i==self.section else s for i,s in enumerate(self.sections))
         self.put(0,'ROBCO TERMLINK // '+tabs,curses.A_BOLD)
         self.put(1,title,curses.A_BOLD)
         visible=max(1,h-6); offset=max(0,selected-visible+1)
@@ -83,6 +85,18 @@ class Navigator:
             self.put(3+index-offset,label,curses.A_REVERSE if index==selected else 0)
         self.put(h-2,detail or self.message)
         self.put(h-1,footer)
+        self.screen.refresh()
+
+    def draw_clock(self):
+        now=datetime.now()
+        self.draw('LOCAL TIME',[],footer='←→ CHANGE SECTION  Q EXIT',detail=' ')
+        h,w=self.screen.getmaxyx()
+        lines=clock_lines(now.strftime('%H:%M:%S'),max(1,w-1),max(1,h-7))
+        top=3+max(0,(h-7-len(lines))//2)
+        for offset,line in enumerate(lines):
+            self.put(top+offset,' '*max(0,(w-1-len(line))//2)+line,curses.A_BOLD)
+        date=now.strftime('%A, %B %d, %Y')
+        self.put(h-2,date.center(max(1,w-1)))
         self.screen.refresh()
 
     def menu(self,title,options,detail=''):
@@ -159,7 +173,7 @@ class Navigator:
 
     def launch(self,action,label,**details):
         session=self.sessions.launch(action,label,**details)
-        self.section=2
+        self.section=self.sections.index('TERMINAL')
         self.selected['terminal']=len(self.sessions.items) # + terminal row occupies index 0
         self.message='Ctrl+] returns to the navigator; the session stays running.'
         self.attach_session(session)
@@ -239,14 +253,16 @@ class Navigator:
         return sorted((v for v in apps.values() if v),key=lambda a:a['name'].casefold())
 
     def rows(self):
-        if self.section==0:
+        if self.sections[self.section]=='HOME':
+            return 'clock','LOCAL TIME',[],[]
+        if self.sections[self.section]=='DATA':
             rows=self.tree.rows()
             labels=[]
             for path,depth,directory in rows:
                 marker=('[-]' if path in self.tree.expanded else '[+]') if directory else ' · '
                 labels.append('  '*min(depth,20)+marker+' '+('HOME' if path==self.tree.root else path.name+('/' if directory else '')))
             return 'home','DIRECTORY TREE',labels,rows
-        if self.section==1:
+        if self.sections[self.section]=='SSH':
             data=self.catalog.read()
             if self.page=='ssh': return 'ssh','SSH',['HOST','SSH-KEY'],[]
             if self.page=='hosts':
@@ -255,9 +271,9 @@ class Navigator:
             if self.page=='keys': return 'keys','SSH-KEY',['Generate new key','Saved keys'],[]
             keys=sorted(data['keys'],key=lambda k:k['name'].casefold())
             return 'savedkeys','SAVED KEYS',[k['name'] for k in keys] or ['No saved keys'],keys
-        if self.section==2:
+        if self.sections[self.section]=='TERMINAL':
             return 'terminal','TERMINAL // Ctrl+] detaches a live session',['+ Local terminal']+[s.label+' // '+s.status for s in self.sessions.items],self.sessions.items
-        if self.section==4:
+        if self.sections[self.section]=='⚙️':
             status='Enabled' if crt_settings.running() and crt_settings.enabled() else 'Disabled'
             animation='Enabled' if crt_settings.running() and crt_settings.animation_enabled() else 'Disabled'
             return 'settings','⚙ SETTINGS',['CRT overlay: '+status,'CRT scan animation: '+animation,'Volume'],[]
@@ -475,15 +491,16 @@ class Navigator:
             while True:
                 try:
                     page,title,labels,items=self.rows()
-                    index=min(self.selected.get(page,0),len(labels)-1)
+                    index=max(0,min(self.selected.get(page,0),len(labels)-1))
                     self.selected[page]=index
                     detail=(self.message or str(items[index][0])) if page=='home' else self.message
                     footer='←→ SECTION  ↑↓ ITEM  ENTER OPEN  CTRL+M MENU  CTRL+N NEW  O OPEN / SHELL  Q EXIT' if page=='home' else '←→ CHANGE SECTION  ↑↓ SELECT ITEM  ENTER OPEN  BACKSPACE BACK  Q EXIT'
+                    redraw=self.draw_clock if page=='clock' else lambda: self.draw(title,labels,index,footer,detail)
                     if self.transition_pending:
                         self.transition_pending=False
-                        animate_section(self.screen,lambda: self.draw(title,labels,index,footer,detail))
+                        animate_section(self.screen,redraw)
                     else:
-                        self.draw(title,labels,index,footer,detail)
+                        redraw()
                     try: key=self.screen.get_wch()
                     except curses.error: continue
                     self.message=''
