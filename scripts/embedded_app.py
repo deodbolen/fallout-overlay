@@ -87,12 +87,12 @@ class Host:
         self.navigator.connect('key-press-event',self.nav_keys)
         self.navigator.connect('child-exited',self.nav_exited)
         self.stack.add_named(self.navigator,'navigator')
-        self.power_button=Gtk.Button(label='⏻ Power')
+        self.power_button=Gtk.Button(label='⏻ Power [P]')
         self.power_button.set_name('home-power')
         self.power_button.set_halign(Gtk.Align.END); self.power_button.set_valign(Gtk.Align.END)
         self.power_button.set_margin_end(16); self.power_button.set_margin_bottom(8)
         self.power_button.set_no_show_all(True)
-        self.power_button.set_tooltip_text('Sleep, log out, restart or shut down')
+        self.power_button.set_tooltip_text('Press P on Home: sleep, log out, restart or shut down')
         self.power_button.connect('clicked',self.open_power_menu)
         overlay.add_overlay(self.power_button)
         self.stack.connect('notify::visible-child-name',lambda *args: self.update_power_button())
@@ -231,6 +231,12 @@ class Host:
         widget.sudo_retry_count=count
 
     def nav_keys(self,widget,event):
+        modifiers=Gdk.ModifierType.CONTROL_MASK|Gdk.ModifierType.MOD1_MASK|Gdk.ModifierType.SUPER_MASK
+        if self.power_button.get_visible() and not event.state&modifiers:
+            if event.keyval in (Gdk.KEY_p,Gdk.KEY_P):
+                self.open_power_menu(self.power_button); return True
+            if event.keyval==Gdk.KEY_Tab:
+                self.power_button.grab_focus(); return True
         if event.state&Gdk.ModifierType.CONTROL_MASK and event.keyval in (Gdk.KEY_m,Gdk.KEY_M):
             widget.feed_child(b'\x0f'); return True
         return False
