@@ -100,7 +100,7 @@ class Navigator:
     def draw_clock(self):
         now=datetime.now()
         # Present the frame only after the digits are drawn, avoiding a blank flash.
-        self.draw('LOCAL TIME',[],footer='←→ CHANGE SECTION  Q EXIT',detail=' ',refresh=False)
+        self.draw('LOCAL TIME',[],footer='',detail=' ',refresh=False)
         h,w=self.screen.getmaxyx()
         value=now.strftime('%H:%M')
         if not self.native_clock(value):
@@ -109,7 +109,7 @@ class Navigator:
             lines=clock_lines(value,max(1,w-5),height)
             top=3+max(0,(h-7-len(lines))//2)
             for offset,line in enumerate(lines):
-                left=max(0,(w-1-len(line))//2-10)
+                left=max(0,(w-1-len(line))//2-12)
                 self.put(top+offset,' '*left+line)
         date=now.strftime('%A, %B %d, %Y')
         self.put(h-2,date.center(max(1,w-1)))
