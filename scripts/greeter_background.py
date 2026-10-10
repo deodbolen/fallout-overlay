@@ -24,31 +24,62 @@ def install_login_theme():
         stream.write('''
 /* LightDM login box: softly green surfaces and clear keyboard focus. */
 @define-color lightdm-gtk-greeter-override-defaults #000000;
-#login_window, #login_window #content_frame, #login_window #buttonbox_frame {
-  background-color: #0b160e;
+#login_window {
+  background-color: #14251a;
   background-image: none;
   color: #b6ffa3;
+  border: 1px solid #659650;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+}
+#login_window #content_frame, #login_window #buttonbox_frame {
+  background: transparent;
+  border: none;
+}
+#login_window #buttonbox_frame {
+  margin-top: 20px;
 }
 #login_window entry {
-  background-color: #14271a;
+  background-color: #0b170f;
   background-image: none;
-  color: #b6ffa3;
-  border: 1px solid #416b47;
+  color: #d5ffd0;
+  border: 1px solid #63856a;
+  border-radius: 5px;
+  padding: 10px 12px;
   caret-color: #9dff72;
 }
+#login_window entry placeholder { color: #a0b99e; }
 #login_window entry:focus {
   border-color: #9dff72;
   box-shadow: 0 0 0 1px #9dff72;
 }
+#login_window button {
+  background: #1b3323;
+  color: #c6edb9;
+  border: 1px solid #608355;
+  border-radius: 5px;
+  padding: 8px 18px;
+  text-shadow: none;
+  box-shadow: none;
+}
+#login_window #login_button {
+  background: #9dff72;
+  color: #10200c;
+  border-color: #9dff72;
+  font-weight: bold;
+}
+#login_window button:hover { background: #31543a; color: #e0ffd4; }
+#login_window button:focus { outline: 2px solid #b6ffa3; outline-offset: 3px; }
 /* Keep branding independent of LightDM's per-user avatar selection. */
 #login_window #user_image {
   -gtk-icon-transform: scale(0);
   background-image: url("/usr/share/pixmaps/fallout-vault-tec.png");
   background-repeat: no-repeat;
   background-position: center;
-  background-size: contain;
+  background-size: 144px 96px;
   min-width: 160px;
   min-height: 108px;
+  margin-bottom: 12px;
 }
 ''')
     # Preserve SVG namespaces for the loader, then deploy a verified PNG.
