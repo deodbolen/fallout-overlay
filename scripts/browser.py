@@ -2,6 +2,7 @@
 """Keyboard directory tree for the RobCo drop-down terminal."""
 import curses
 from datetime import datetime
+from digital_clock import clock_lines
 import os
 from pathlib import Path
 import subprocess
@@ -91,10 +92,11 @@ class Navigator:
         # Present the frame only after the digits are drawn, avoiding a blank flash.
         self.draw('LOCAL TIME',[],footer='←→ CHANGE SECTION  Q EXIT',detail=' ',refresh=False)
         h,w=self.screen.getmaxyx()
-        time=now.strftime('%H:%M')
-        top=3+max(0,(h-8)//2)
-        left=max(0,(w-1-len(time))//2-2)
-        self.put(top,' '*left+time)
+        lines=clock_lines(now.strftime('%H:%M'),max(1,w-5),max(1,h-7))
+        top=3+max(0,(h-7-len(lines))//2)
+        for offset,line in enumerate(lines):
+            left=max(0,(w-1-len(line))//2-2)
+            self.put(top+offset,' '*left+line)
         date=now.strftime('%A, %B %d, %Y')
         self.put(h-2,date.center(max(1,w-1)))
         self.screen.refresh()
