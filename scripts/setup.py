@@ -103,6 +103,8 @@ def main():
                 if src.is_dir(): shutil.copytree(src,dest)
                 else: shutil.copy2(src,dest)
         desktop_shortcuts(restore=True)
+        if pathlib.Path('/var/lib/fallout-ui/greeter-background/saved').exists():
+            run(['sudo','/usr/bin/python3',str(ROOT/'scripts/greeter_background.py'),'restore'])
         subprocess.Popen(['xfce4-panel'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,start_new_session=True)
         print('Original XFCE configuration restored. Log out/in to refresh existing application windows.'); return
     # Never overwrite original baseline on repeat install.
@@ -161,6 +163,7 @@ def main():
     gen=CONFIG/'xfce4/panel/genmon-4.rc'; gen.parent.mkdir(parents=True,exist_ok=True)
     gen.write_text(f'Command=/usr/bin/python3 "{ROOT}/scripts/metrics.py"\nUseLabel=0\nText=\nUpdatePeriod=2000\nFont=DejaVu Sans Mono 12\n')
     subprocess.Popen(['xfce4-panel'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,start_new_session=True)
+    run(['sudo','/usr/bin/python3',str(ROOT/'scripts/greeter_background.py'),'install'])
     # CRT is opt-in; desktop installation must not start a full-screen overlay.
     print(f'Installed. Terminal shortcut: {key}. Backup: {BACKUP}')
 if __name__=='__main__': main()

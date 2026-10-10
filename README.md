@@ -13,7 +13,7 @@ Tested on **Debian 13, XFCE, X11**. Copy the entire project to a permanent direc
 ./install.sh          # Install missing packages and configure the desktop
 ```
 
-Run as your normal user. The installer uses sudo only for missing Debian packages and checks GTK, VTE, and audio support before changing desktop settings. Keep the project directory in place: desktop launchers and wallpaper reference its files.
+Run as your normal user. The installer uses sudo for missing Debian packages and the system login-screen background and checks GTK, VTE, and audio support before changing desktop settings. Keep the project directory in place: desktop launchers and wallpaper reference its files.
 
 Installation sets the Pip-Boy wallpaper on connected monitors and workspaces, disables wallpaper cycling, and hides desktop icons. Desktop launchers (`.desktop` files) and symbolic links are moved into the backup; ordinary files and folders are kept. Restore returns removed shortcuts when their original paths are unoccupied.
 
@@ -28,6 +28,8 @@ Restore the captured desktop configuration with:
 The first backup is preserved at `~/.local/state/fallout-ui/original`; reinstalling never replaces it. Restore replaces subsequent changes to the captured desktop settings. Installed system packages remain installed.
 
 The navigator background is transparent by default, showing your desktop behind the green text. Toggle **Settings → Transparent background** to switch to the opaque Pip-Boy background; the preference saves immediately. Installation enables XFCE compositing for transparency.
+
+The LightDM GTK login screen uses a solid black background after installation. Its original configuration is backed up under `/var/lib/fallout-ui/greeter-background` and restored by `restore.sh`.
 
 ## Everyday controls
 
