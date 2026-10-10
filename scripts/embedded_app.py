@@ -129,7 +129,7 @@ class Host:
         ink,_=layout.get_pixel_extents()
         x=max(0,(size.width-ink.width)/2-10*cell_w)-ink.x
         y=3*cell_h+max(0,(size.height-7*cell_h-ink.height)/2)-ink.y
-        context.save(); context.set_source_rgb(182/255,1,163/255)
+        context.save(); Gdk.cairo_set_source_rgba(context,color('#9dff72'))
         context.move_to(x,y); PangoCairo.show_layout(context,layout); context.restore()
         return False
 
