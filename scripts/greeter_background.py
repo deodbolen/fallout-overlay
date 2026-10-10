@@ -14,7 +14,7 @@ BACKUP = Path('/var/lib/fallout-ui/greeter-background')
 BACKGROUND = Path('/usr/share/backgrounds/fallout-ui-login.svg')
 ROOT = Path(__file__).resolve().parent.parent
 LOGIN_THEME = Path('/usr/share/themes/Fallout-Login')
-LOGO = Path('/usr/share/pixmaps/fallout-vault-tec.svg')
+LOGO = Path('/usr/share/pixmaps/fallout-vault-tec.png')
 
 
 def install_login_theme():
@@ -40,14 +40,37 @@ def install_login_theme():
   border-color: #9dff72;
   box-shadow: 0 0 0 1px #9dff72;
 }
+/* Keep branding independent of LightDM's per-user avatar selection. */
+#login_window #user_image {
+  -gtk-icon-transform: scale(0);
+  background-image: url("/usr/share/pixmaps/fallout-vault-tec.png");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  min-width: 160px;
+  min-height: 108px;
+}
 ''')
+    # Preserve SVG namespaces for the loader, then deploy a verified PNG.
+    # The greeter can read PNG even if its SVG loader is unavailable.
+    import gi
+    gi.require_version('GdkPixbuf', '2.0')
+    from gi.repository import GdkPixbuf
+    ET.register_namespace('', 'http://www.w3.org/2000/svg')
     logo = ET.parse(ROOT / 'assets/Vault-Tec_Logo.svg')
     for element in logo.getroot().iter():
         if element.get('fill') not in (None, 'none'):
             element.set('fill', '#9dff72')
     LOGO.parent.mkdir(parents=True, exist_ok=True)
-    logo.write(LOGO, encoding='utf-8', xml_declaration=True)
+    loader = GdkPixbuf.PixbufLoader.new_with_type('svg')
+    loader.write(ET.tostring(logo.getroot(), encoding='utf-8'))
+    loader.close()
+    pixbuf = loader.get_pixbuf()
+    if pixbuf is None:
+        raise RuntimeError('Could not render the Vault-Tec logo.')
+    pixbuf.savev(str(LOGO), 'png', [], [])
     LOGO.chmod(0o644)
+    GdkPixbuf.Pixbuf.new_from_file(str(LOGO))
 
 
 def login_background(hostname):
