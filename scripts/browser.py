@@ -75,7 +75,7 @@ class Navigator:
             try: self.screen.addnstr(y,0,text,w-1,attr)
             except curses.error: pass
 
-    def draw(self,title,labels,selected=0,footer='←→ SECTION  ↑↓ ITEM  ENTER OPEN  ESC BACK',detail=''):
+    def draw(self,title,labels,selected=0,footer='←→ SECTION  ↑↓ ITEM  ENTER OPEN  ESC BACK',detail='',refresh=True):
         h,w=self.screen.getmaxyx(); self.screen.erase()
         tabs='   '.join(('[  '+s+'  ]' if s=='⚙️' else '['+s+']') if i==self.section else s for i,s in enumerate(self.sections))
         self.put(0,'ROBCO TERMLINK // '+tabs,curses.A_BOLD)
@@ -85,11 +85,12 @@ class Navigator:
             self.put(3+index-offset,label,curses.A_REVERSE if index==selected else 0)
         self.put(h-2,detail or self.message)
         self.put(h-1,footer)
-        self.screen.refresh()
+        if refresh: self.screen.refresh()
 
     def draw_clock(self):
         now=datetime.now()
-        self.draw('LOCAL TIME',[],footer='←→ CHANGE SECTION  Q EXIT',detail=' ')
+        # Present the frame only after the digits are drawn, avoiding a blank flash.
+        self.draw('LOCAL TIME',[],footer='←→ CHANGE SECTION  Q EXIT',detail=' ',refresh=False)
         h,w=self.screen.getmaxyx()
         lines=clock_lines(now.strftime('%H:%M:%S'),max(1,w-1),max(1,h-7))
         top=3+max(0,(h-7-len(lines))//2)
