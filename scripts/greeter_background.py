@@ -6,11 +6,48 @@ from pathlib import Path
 import shutil
 import socket
 import sys
+import xml.etree.ElementTree as ET
 from xml.sax.saxutils import escape
 
 CONFIG = Path('/etc/lightdm/lightdm-gtk-greeter.conf')
 BACKUP = Path('/var/lib/fallout-ui/greeter-background')
 BACKGROUND = Path('/usr/share/backgrounds/fallout-ui-login.svg')
+ROOT = Path(__file__).resolve().parent.parent
+LOGIN_THEME = Path('/usr/share/themes/Fallout-Login')
+LOGO = Path('/usr/share/pixmaps/fallout-vault-tec.svg')
+
+
+def install_login_theme():
+    shutil.copytree(ROOT / 'theme', LOGIN_THEME, dirs_exist_ok=True)
+    css = LOGIN_THEME / 'gtk-3.0/gtk.css'
+    with css.open('a') as stream:
+        stream.write('''
+/* LightDM login box: softly green surfaces and clear keyboard focus. */
+@define-color lightdm-gtk-greeter-override-defaults #000000;
+#login_window, #login_window #content_frame, #login_window #buttonbox_frame {
+  background-color: #0b160e;
+  background-image: none;
+  color: #b6ffa3;
+}
+#login_window entry {
+  background-color: #14271a;
+  background-image: none;
+  color: #b6ffa3;
+  border: 1px solid #416b47;
+  caret-color: #9dff72;
+}
+#login_window entry:focus {
+  border-color: #9dff72;
+  box-shadow: 0 0 0 1px #9dff72;
+}
+''')
+    logo = ET.parse(ROOT / 'assets/Vault-Tec_Logo.svg')
+    for element in logo.getroot().iter():
+        if element.get('fill') not in (None, 'none'):
+            element.set('fill', '#9dff72')
+    LOGO.parent.mkdir(parents=True, exist_ok=True)
+    logo.write(LOGO, encoding='utf-8', xml_declaration=True)
+    LOGO.chmod(0o644)
 
 
 def login_background(hostname):
@@ -48,6 +85,11 @@ def main():
         (BACKUP / 'saved').touch()
     if not cfg.has_section('greeter'):
         cfg.add_section('greeter')
+    install_login_theme()
+    cfg.set('greeter', 'theme-name', 'Fallout-Login')
+    cfg.set('greeter', 'default-user-image', str(LOGO))
+    cfg.set('greeter', 'hide-user-image', 'false')
+    cfg.set('greeter', 'round-user-image', 'false')
     BACKGROUND.parent.mkdir(parents=True, exist_ok=True)
     BACKGROUND.write_text(login_background(socket.gethostname()))
     BACKGROUND.chmod(0o644)
