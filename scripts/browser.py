@@ -14,6 +14,7 @@ from terminal_sessions import Sessions
 from path_completion import directory_matches, complete_directory
 import crt_settings
 import sound_settings
+import navigator_settings
 from section_transition import animate as animate_section
 from file_actions import source_file, new_name, destination, copy_file, move_file, compress_file, file_info, create_entry
 import configparser
@@ -291,7 +292,7 @@ class Navigator:
         if self.sections[self.section]=='⚙️':
             status='Enabled' if crt_settings.running() and crt_settings.enabled() else 'Disabled'
             animation='Enabled' if crt_settings.running() and crt_settings.animation_enabled() else 'Disabled'
-            return 'settings','⚙ SETTINGS',['CRT overlay: '+status,'CRT scan animation: '+animation,'Volume'],[]
+            return 'settings','⚙ SETTINGS',['CRT overlay: '+status,'CRT scan animation: '+animation,'Volume','Navigator font size: '+str(navigator_settings.font_size())+' pt'],[]
         if self.apps is None: self.apps=self.applications()
         return 'apps','APPLICATIONS',[a['name'] for a in self.apps] or ['No applications'],self.apps
 
@@ -426,6 +427,22 @@ class Navigator:
         elif choice==8: self.open_gui(path)
         elif choice==9: self.open_with(path)
 
+    def font_settings(self):
+        while True:
+            size=navigator_settings.font_size()
+            self.draw('NAVIGATOR FONT SIZE',[str(size)+' pt'],footer='+/- ADJUST  ENTER SET SIZE  ESC BACK',detail=self.message or '8–32 pt. Changes save and apply immediately.')
+            key=self.menu_key()
+            if key in ('\x1b',curses.KEY_BACKSPACE,'\x7f'): return
+            if key in ('+','=','-'):
+                navigator_settings.save_font_size(max(navigator_settings.MIN_SIZE,min(navigator_settings.MAX_SIZE,size+(1 if key in ('+','=') else -1))))
+            elif key in ENTER:
+                value=self.text('NAVIGATOR FONT SIZE (8–32 pt)',str(size))
+                if value is not None:
+                    try:
+                        navigator_settings.save_font_size(value)
+                        self.message='Navigator font size saved.'
+                    except (ValueError,TypeError): self.message='Enter a whole number from 8 to 32.'
+
     def volume_settings(self):
         index=0
         fields=['effects_volume','fan_volume']
@@ -479,6 +496,8 @@ class Navigator:
                         session.close(); self.sessions.items.remove(session)
                 else: self.attach_session(session)
         elif page=='settings':
+            if index==3:
+                self.font_settings(); return
             if index==2:
                 self.volume_settings(); return
             label='CRT OVERLAY' if index==0 else 'CRT SCAN ANIMATION'

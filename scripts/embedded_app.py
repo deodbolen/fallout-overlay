@@ -29,6 +29,7 @@ gi.require_foreign('cairo')
 from gi.repository import Gtk,Gdk,GLib,Vte,Pango,PangoCairo,GdkPixbuf
 from ssh_manager import atomic_json,state_dir
 from sounds import Sounds
+import navigator_settings
 
 NAV_FONT='DejaVu Sans Mono 16'
 SHELL_FONT='DejaVu Sans Mono 14'
@@ -75,7 +76,8 @@ class Host:
         css.load_from_data(b'window { background: #050a06; color: #b6ffa3; } vte-terminal { background: transparent; } label { color: #b6ffa3; } #session-reminder { font-family: \"DejaVu Sans Mono\"; font-size: 11pt; }')
         Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(),css,Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
         self.clock_value=''
-        self.navigator=self.terminal(NAV_FONT)
+        self.nav_font_size=navigator_settings.font_size()
+        self.navigator=self.terminal('DejaVu Sans Mono '+str(self.nav_font_size))
         self.navigator.connect_after('draw',self.draw_clock)
         self.navigator.connect('key-press-event',self.nav_keys)
         self.navigator.connect('child-exited',self.nav_exited)
@@ -311,6 +313,10 @@ class Host:
     def refresh(self):
         if self.closed: return False
         self.sounds.refresh()
+        size=navigator_settings.font_size()
+        if size!=self.nav_font_size:
+            self.navigator.set_font(Pango.FontDescription('DejaVu Sans Mono '+str(size)))
+            self.nav_font_size=size
         for record in self.records.values():
             if record['closed']: continue
             try: data=json.loads(record['path'].read_text())
