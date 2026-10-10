@@ -23,3 +23,18 @@ def save_font_size(value):
     data = json.loads(path.read_text()) if path.exists() else {}
     data['navigator_font_size'] = value
     atomic_json(path, data)
+
+
+def transparent():
+    try:
+        data = json.loads((config_dir() / 'settings.json').read_text())
+        return data.get('navigator_transparent', True) is not False
+    except (OSError, ValueError, AttributeError):
+        return True
+
+
+def save_transparent(enabled):
+    path = config_dir() / 'settings.json'
+    data = json.loads(path.read_text()) if path.exists() else {}
+    data['navigator_transparent'] = bool(enabled)
+    atomic_json(path, data)

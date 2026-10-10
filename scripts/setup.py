@@ -139,6 +139,7 @@ def main():
     setprop('xsettings','/Gtk/FontName','DejaVu Sans 12')
     setprop('xfwm4','/general/title_font','DejaVu Sans Bold 12')
     setprop('xfwm4','/general/theme','Fallout-PipBoy')
+    setprop('xfwm4','/general/use_compositing',True,'bool')
     desktop_background()
     command=__import__('shlex').quote(str(ROOT/'scripts/terminal.sh')); key='F12'
     for candidate in ('F12','<Primary><Alt>F12'):

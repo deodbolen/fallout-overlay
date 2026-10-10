@@ -50,7 +50,12 @@ class Host:
         self.sounds=Sounds()
         self.path=path; self.listener=listener; self.records={}; self.current=None
         self.waiter=None; self.closed=False; self.nav_pid=None
+        self.transparent=navigator_settings.transparent()
         self.window=Gtk.Window(title='ROBCO TERMLINK')
+        visual=self.window.get_screen().get_rgba_visual()
+        if visual: self.window.set_visual(visual)
+        self.window.set_app_paintable(True)
+        self.window.connect('draw',self.clear_window)
         self.window.set_decorated(False); self.window.set_keep_above(True)
         self.window.connect('delete-event',self.delete)
         self.window.connect('destroy',lambda *args: Gtk.main_quit())
@@ -73,7 +78,7 @@ class Host:
         self.footer.set_name('session-reminder')
         self.box.pack_end(self.footer,False,False,0)
         css=Gtk.CssProvider()
-        css.load_from_data(b'window { background: #050a06; color: #b6ffa3; } vte-terminal { background: transparent; } label { color: #b6ffa3; } #session-reminder { font-family: \"DejaVu Sans Mono\"; font-size: 11pt; }')
+        css.load_from_data(b'window { background: transparent; color: #b6ffa3; } vte-terminal { background: transparent; } label { color: #b6ffa3; } #session-reminder { font-family: \"DejaVu Sans Mono\"; font-size: 11pt; }')
         Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(),css,Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
         self.clock_value=''
         self.nav_font_size=navigator_settings.font_size()
@@ -105,7 +110,15 @@ class Host:
         terminal.set_mouse_autohide(True)
         return terminal
 
+    def clear_window(self,widget,context):
+        context.save()
+        context.set_operator(cairo.OPERATOR_SOURCE)
+        context.set_source_rgba(0,0,0,0)
+        context.paint(); context.restore()
+        return False
+
     def draw_background(self,widget,context):
+        if self.transparent and self.window.get_screen().is_composited(): return False
         size=widget.get_allocation()
         context.set_source_rgb(5/255,10/255,6/255); context.paint()
         context.save(); context.scale(size.width/self.pixbuf.get_width(),size.height/self.pixbuf.get_height())
@@ -313,6 +326,10 @@ class Host:
     def refresh(self):
         if self.closed: return False
         self.sounds.refresh()
+        transparent=navigator_settings.transparent()
+        if transparent!=self.transparent:
+            self.transparent=transparent
+            self.window.queue_draw()
         size=navigator_settings.font_size()
         if size!=self.nav_font_size:
             self.navigator.set_font(Pango.FontDescription('DejaVu Sans Mono '+str(size)))
