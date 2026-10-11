@@ -7,6 +7,7 @@ from pathlib import Path
 import pwd
 import shutil
 import stat
+import subprocess
 import zipfile
 
 
@@ -50,6 +51,39 @@ def copy_file(source,target):
     except BaseException:
         if created: target.unlink(missing_ok=True)
         raise
+    return target
+
+
+def downloads_directory():
+    try:
+        result=subprocess.run(['xdg-user-dir','DOWNLOAD'],capture_output=True,text=True,check=True)
+        folder=Path(result.stdout.strip())
+        if not folder.is_absolute(): raise ValueError('Invalid Downloads directory.')
+    except (OSError,subprocess.CalledProcessError,ValueError):
+        folder=Path.home()/'Downloads'
+    folder.mkdir(parents=True,exist_ok=True)
+    return folder
+
+
+def download_file(source):
+    """Download file contents, choosing a free name without overwriting files."""
+    source=source_file(source)
+    folder=downloads_directory()
+    with source.open('rb') as reader:
+        number=0
+        while True:
+            name=source.name if number==0 else f'{source.stem} ({number}){source.suffix}'
+            target=folder/name
+            try: writer=target.open('xb')
+            except FileExistsError:
+                number+=1
+                continue
+            break
+        try:
+            with writer: shutil.copyfileobj(reader,writer,1024*1024)
+        except BaseException:
+            target.unlink(missing_ok=True)
+            raise
     return target
 
 

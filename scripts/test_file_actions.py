@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 import zipfile
-from file_actions import copy_file, move_file, destination, new_name, compress_file, file_info, create_entry
+from file_actions import copy_file, move_file, destination, new_name, compress_file, file_info, create_entry, download_file
 from browser import Navigator
 from unittest.mock import Mock
 
@@ -14,6 +14,26 @@ class FileActionsTests(unittest.TestCase):
         self.source=self.root/'file with spaces.txt'; self.source.write_text('preserve content')
         self.folder=self.root/'destination'; self.folder.mkdir()
     def tearDown(self): self.temp.cleanup()
+    def test_download_preserves_existing_and_copies_link_contents(self):
+        existing=self.folder/self.source.name; existing.write_text('keep')
+        with patch('file_actions.downloads_directory',return_value=self.folder):
+            target=download_file(self.source)
+            self.assertEqual(target.read_text(),'preserve content')
+            self.assertEqual(existing.read_text(),'keep')
+            link=self.root/'linked.txt'; link.symlink_to(self.source)
+            downloaded=download_file(link)
+            self.assertFalse(downloaded.is_symlink())
+            self.assertEqual(downloaded.read_text(),'preserve content')
+
+    def test_transfer_menu_depends_on_data_location(self):
+        navigator=Navigator.__new__(Navigator)
+        navigator.tree=object()
+        navigator.menu=Mock(return_value=None)
+        for identity,expected in [('home','SCP (coming later)'),('root','SCP (coming later)'),('remote-server','Download')]:
+            navigator.data_trees={identity:navigator.tree}
+            navigator.file_actions(self.source)
+            self.assertEqual(navigator.menu.call_args.args[1][3],expected)
+
     def test_create_file_directory_and_preserve_existing(self):
         file=create_entry(self.folder,'new file.txt','File')
         self.assertEqual(file.read_bytes(),b'')

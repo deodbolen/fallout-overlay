@@ -20,7 +20,7 @@ import time
 from network_discovery import discovered_servers
 from urllib.parse import urlsplit
 from section_transition import animate as animate_section
-from file_actions import source_file, new_name, destination, copy_file, move_file, compress_file, file_info, create_entry
+from file_actions import source_file, new_name, destination, copy_file, move_file, compress_file, file_info, create_entry, download_file
 import configparser
 import shutil
 import shlex
@@ -489,7 +489,9 @@ class Navigator:
 
     def file_actions(self,path):
         source_file(path)
-        choice=self.menu('FILE // '+path.name,['Rename','Copy','Move','SCP (coming later)','Delete','Compress','File info','Open','Open GUI','Open with >','Cancel'],detail=str(path))
+        remote=any(identity not in ('home','root') and tree is self.tree for identity,tree in getattr(self,'data_trees',{}).items())
+        transfer='Download' if remote else 'SCP (coming later)'
+        choice=self.menu('FILE // '+path.name,['Rename','Copy','Move',transfer,'Delete','Compress','File info','Open','Open GUI','Open with >','Cancel'],detail=str(path))
         if choice==0:
             name=self.text('RENAME // '+path.name,path.name)
             if name is not None:
@@ -498,7 +500,12 @@ class Navigator:
                 self.selected['home']=next((i for i,row in enumerate(rows) if row[0]==target),self.selected.get('home',0))
                 self.message='Renamed to '+target.name
         elif choice in (1,2): self.file_destination(path,'Copy' if choice==1 else 'Move')
-        elif choice==3: self.message='SCP is reserved for the next update; no transfer was started.'
+        elif choice==3:
+            if remote:
+                self.draw('DOWNLOADING // '+path.name,['Working…'],detail='Saving to your Downloads folder.')
+                target=download_file(path)
+                self.message='Downloaded to '+str(target)
+            else: self.message='SCP is reserved for the next update; no transfer was started.'
         elif choice==4:
             if self.menu('DELETE // '+path.name,['Move to Trash','Cancel'],detail=str(path))==0:
                 result=subprocess.run(['gio','trash','--',str(path)],capture_output=True,text=True)
