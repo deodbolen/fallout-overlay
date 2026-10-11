@@ -64,7 +64,7 @@ Text documents open in embedded Nano. GUI applications hide the navigator; F12 b
 - CPU, memory, disk, network, temperature, and battery panel metrics.
 - Optional click-through CRT scanlines and animation, plus configurable sound effects and fan hum.
 
-See the [full user guide](docs/user-guide.md) for SSH workflows, file actions, CRT setup, sound behavior, configuration locations, and limitations. SCP remains a placeholder.
+See the [full user guide](docs/user-guide.md) for SSH workflows, file actions, CRT setup, sound behavior, configuration locations, and limitations. Local file menus include SCP: choose a saved SSH host (or add one), enter a remote directory, and select Send. Authentication and transfer progress appear in an embedded terminal. Existing destination files with the same name are replaced. Remote file menus offer Download to the local Downloads folder instead.
 
 ## Development
 

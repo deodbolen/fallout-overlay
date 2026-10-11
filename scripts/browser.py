@@ -9,7 +9,7 @@ import subprocess
 
 from navigator_tree import Tree
 
-from ssh_manager import Catalog, username, generate_path, remote_directory
+from ssh_manager import Catalog, username, generate_path, remote_directory, scp_args
 from terminal_sessions import Sessions
 from path_completion import directory_matches, complete_directory
 import crt_settings
@@ -487,10 +487,42 @@ class Navigator:
                     except (OSError,ValueError) as error: self.message=str(error)
                 else: return
 
+    def scp_file(self,path):
+        host=None; directory='~/'; index=0
+        while True:
+            self.draw('SCP // '+path.name,['Server: '+(host['name'] if host else '(choose SSH host)'),
+                      'Remote directory: '+directory,'SEND','Cancel'],index,
+                      detail=self.message or 'Copies the file. An existing remote file with the same name will be replaced.')
+            key=self.menu_key()
+            if key==curses.KEY_UP: index=max(0,index-1)
+            elif key==curses.KEY_DOWN: index=min(3,index+1)
+            elif key in ('\x1b',curses.KEY_BACKSPACE,'\x7f'): return
+            elif key in ENTER:
+                if index==0:
+                    hosts=sorted(self.catalog.read()['hosts'],key=lambda item:item['name'].casefold())
+                    choice=self.menu('SCP DESTINATION',[item['name']+' // '+username(item)+'@'+item['address'] for item in hosts]+['+ Host','Cancel'])
+                    if choice is not None and choice<len(hosts): host=hosts[choice]
+                    elif choice==len(hosts): self.host_form()
+                elif index==1:
+                    value=self.text('REMOTE DIRECTORY',directory)
+                    if value is not None: directory=value
+                elif index==2:
+                    if host is None:
+                        self.message='Choose an SSH host first.'; continue
+                    keyfile=next((item for item in self.catalog.read()['keys'] if item['id']==host['key']),None)
+                    if host['key'] and keyfile is None:
+                        self.message='The saved SSH key is missing. Edit the host in SSH settings.'; continue
+                    try: argv=scp_args(path,host,directory,keyfile)
+                    except (OSError,ValueError) as error:
+                        self.message=str(error); continue
+                    self.launch('command','SCP: '+path.name+' → '+host['name'],argv=argv)
+                    return
+                else: return
+
     def file_actions(self,path):
         source_file(path)
         remote=any(identity not in ('home','root') and tree is self.tree for identity,tree in getattr(self,'data_trees',{}).items())
-        transfer='Download' if remote else 'SCP (coming later)'
+        transfer='Download' if remote else 'SCP'
         choice=self.menu('FILE // '+path.name,['Rename','Copy','Move',transfer,'Delete','Compress','File info','Open','Open GUI','Open with >','Cancel'],detail=str(path))
         if choice==0:
             name=self.text('RENAME // '+path.name,path.name)
@@ -505,7 +537,7 @@ class Navigator:
                 self.draw('DOWNLOADING // '+path.name,['Working…'],detail='Saving to your Downloads folder.')
                 target=download_file(path)
                 self.message='Downloaded to '+str(target)
-            else: self.message='SCP is reserved for the next update; no transfer was started.'
+            else: self.scp_file(path)
         elif choice==4:
             if self.menu('DELETE // '+path.name,['Move to Trash','Cancel'],detail=str(path))==0:
                 result=subprocess.run(['gio','trash','--',str(path)],capture_output=True,text=True)

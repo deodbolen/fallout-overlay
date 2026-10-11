@@ -98,6 +98,19 @@ def ssh_args(host,key=None,password_only=False,key_only=False):
     return args+[target(host)]
 
 
+def scp_args(source,host,directory,key=None):
+    source=Path(source).absolute()
+    if not source.is_file(): raise ValueError('Select an existing local file.')
+    directory=directory.strip()
+    if not directory or any(ord(c)<32 for c in directory):
+        raise ValueError('Enter a remote directory without control characters.')
+    address=host['address']
+    if ':' in address and not address.startswith('['): address='['+address+']'
+    remote=username(host)+'@'+address+':'+directory.rstrip('/')+'/'
+    # Debian's OpenSSH scp uses SFTP by default; keep paths as literal arguments.
+    return ['scp']+ssh_args(host,key)[1:-1]+['--',str(source),remote]
+
+
 def public_key(key):
     lines=Path(key['path']+'.pub').read_text().splitlines()
     if len(lines)!=1: raise ValueError('Expected one public key in the .pub file.')
@@ -154,4 +167,3 @@ def generate_path(name):
     path=Path.home()/'.ssh'/('fallout_'+name)
     if path.exists() or Path(str(path)+'.pub').exists(): raise ValueError('That key filename already exists.')
     return path
-

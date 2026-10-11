@@ -14,6 +14,18 @@ class FileActionsTests(unittest.TestCase):
         self.source=self.root/'file with spaces.txt'; self.source.write_text('preserve content')
         self.folder=self.root/'destination'; self.folder.mkdir()
     def tearDown(self): self.temp.cleanup()
+    def test_scp_arguments_preserve_paths_and_support_ipv6(self):
+        from ssh_manager import scp_args
+        host={'name':'Server','address':'2001:db8::1','user':'alice','key':''}
+        args=scp_args(self.source,host,'/shared/my files')
+        self.assertEqual(args[0],'scp')
+        self.assertEqual(args[-3:],['--',str(self.source),'alice@[2001:db8::1]:/shared/my files/'])
+        self.assertNotIn('-O',args)
+        self.assertEqual(scp_args(self.source,host,'/')[-1],'alice@[2001:db8::1]:/')
+        with self.assertRaises(ValueError): scp_args(self.source,host,'')
+        with self.assertRaises(ValueError): scp_args(self.source,host,'bad\npath')
+        with self.assertRaises(ValueError): scp_args(self.source,host,'~/',{'path':str(self.root/'missing-key')})
+
     def test_download_preserves_existing_and_copies_link_contents(self):
         existing=self.folder/self.source.name; existing.write_text('keep')
         with patch('file_actions.downloads_directory',return_value=self.folder):
@@ -29,7 +41,7 @@ class FileActionsTests(unittest.TestCase):
         navigator=Navigator.__new__(Navigator)
         navigator.tree=object()
         navigator.menu=Mock(return_value=None)
-        for identity,expected in [('home','SCP (coming later)'),('root','SCP (coming later)'),('remote-server','Download')]:
+        for identity,expected in [('home','SCP'),('root','SCP'),('remote-server','Download')]:
             navigator.data_trees={identity:navigator.tree}
             navigator.file_actions(self.source)
             self.assertEqual(navigator.menu.call_args.args[1][3],expected)
@@ -121,10 +133,12 @@ class FileActionsTests(unittest.TestCase):
             navigator.open_with(self.source)
             launch.assert_not_called()
 
-    def test_cancel_and_scp_do_not_change_file(self):
+    def test_cancel_and_scp_form_do_not_change_file(self):
         navigator=Navigator(Mock())
+        navigator.scp_file=Mock()
         for choice in (None,3,10):
             navigator.menu=Mock(return_value=choice); navigator.file_actions(self.source)
             self.assertEqual(self.source.read_text(),'preserve content')
+        navigator.scp_file.assert_called_once_with(self.source)
 
 if __name__=='__main__': unittest.main()
