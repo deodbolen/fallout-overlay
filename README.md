@@ -50,7 +50,7 @@ In Settings, select **Section shortcut** and press Enter to toggle between **Ctr
 | Ctrl+Shift+C / V | Copy / paste terminal text |
 | Q in the navigator | Exit; confirm closing active sessions |
 
-The **Network** page discovers SMB servers advertised through the desktop network browser. Open a server to list its shares; selecting a share saves it as a Data page and connects. Discovery refreshes every 30 seconds while viewing that page; Enter on **Refresh network** scans again. Backspace returns to the preceding network location. Servers blocked by network discovery settings can still be added with **+ Server**.
+Discovery runs quietly in Data. The **Network** page appears only when an SMB server is discovered; generic network shortcuts and empty results stay hidden. Open a server to list its shares; selecting a share saves it as a Data page and connects. Discovery refreshes every 30 seconds while viewing that page; Enter on **Refresh network** scans again. Backspace returns to the preceding network location. Servers blocked by network discovery settings can still be added with **+ Server**.
 
 Data starts in your home directory. Press Left for `/`, or Right for saved remote servers and **+ Server**. Add a name and an address such as `smb://nas/shared` or `sftp://user@server/home/user`, then press Enter on the server page to connect. Authentication uses the desktop prompt; passwords are not stored in the server catalog. Rerun the installer to install the required GVfs backends and FUSE support.
 

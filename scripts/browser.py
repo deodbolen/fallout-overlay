@@ -16,6 +16,8 @@ import crt_settings
 import sound_settings
 import navigator_settings
 import file_servers
+import time
+from network_discovery import discovered_servers
 from urllib.parse import urlsplit
 from section_transition import animate as animate_section
 from file_actions import source_file, new_name, destination, copy_file, move_file, compress_file, file_info, create_entry
@@ -37,6 +39,9 @@ class Navigator:
         self.tree.expanded.add(self.tree.root)
         self.data_index=1
         self.network_history=['network:///']
+        self.discovered=[]
+        self.discovery_checked=0
+        self.previous_data_pages=[]
         self.data_trees={'home':self.tree,'root':Tree(Path('/'))}
         self.data_trees['root'].expanded.add(Path('/'))
         self.data_selections={}
@@ -289,7 +294,25 @@ class Navigator:
         return True
 
     def data_pages(self):
-        return [('root','ROOT'),('home','HOME')]+[(server['id'],server['name']) for server in file_servers.servers()]+[('network','NETWORK'),('add','+ Server')]
+        if os.environ.get('FALLOUT_EMBEDDED_SOCKET') and time.monotonic()-self.discovery_checked>=2:
+            self.discovery_checked=time.monotonic()
+            try:
+                from embedded_client import request
+                result=request('browse_network',uri='network:///')
+                self.discovered=discovered_servers(result.get('items',[]))
+            except (OSError,ValueError):
+                self.discovered=[]
+        pages=[('root','ROOT'),('home','HOME')]+[(server['id'],server['name']) for server in file_servers.servers()]
+        if self.discovered: pages.append(('network','NETWORK'))
+        pages.append(('add','+ Server'))
+        previous=self.previous_data_pages
+        if previous and pages!=previous:
+            identity=previous[min(self.data_index,len(previous)-1)][0]
+            self.data_index=next((i for i,(key,_) in enumerate(pages) if key==identity),1)
+            if identity=='network' and not self.discovered:
+                self.network_history=['network:///']
+        self.previous_data_pages=pages
+        return pages
 
     def add_file_server(self):
         name=self.text('SERVER NAME')
@@ -325,8 +348,8 @@ class Navigator:
                     return 'network',title,['Network discovery requires the embedded navigator'],[]
                 from embedded_client import request
                 result=request('browse_network',uri=self.network_history[-1])
-                entries=result['items']
-                status='Searching…' if result['loading'] else result['error'] or ('No SMB servers found' if not entries else 'Select a server or share')
+                entries=discovered_servers(result.get('items',[])) if self.network_history[-1]=='network:///' else result.get('items',[])
+                status='Searching…' if result['loading'] else result.get('message','') or ('No SMB servers found' if not entries else 'Select a server or share')
                 self.message=status
                 return 'network',title,['Refresh network']+[entry['name'] for entry in entries],entries
             if identity=='add': return 'addserver',title,['+ Server'],[]

@@ -11,6 +11,17 @@ def browse_uri(value):
     return value
 
 
+def discovered_servers(items):
+    """Exclude generic network/workgroup shortcuts from discovered servers."""
+    result=[]
+    for item in items:
+        uri=item.get('uri','')
+        parsed=urlsplit(uri)
+        if (parsed.scheme=='smb' and parsed.hostname) or (parsed.scheme=='dns-sd' and '_smb._tcp' in uri):
+            result.append(item)
+    return result
+
+
 class Discovery:
     def __init__(self,window):
         self.window=window
@@ -58,4 +69,5 @@ class Discovery:
             operation=Gtk.MountOperation.new(self.window)
             operation.set_password_save(Gio.PasswordSave.NEVER)
             location.mount_enclosing_volume(Gio.MountMountFlags.NONE,operation,cancel,mounted)
-        return {key:state[key] for key in ('items','loading','error')}
+        # The RPC envelope reserves 'error' for failed requests.
+        return {'items':state['items'],'loading':state['loading'],'message':state['error']}

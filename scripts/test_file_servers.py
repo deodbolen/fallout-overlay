@@ -29,7 +29,7 @@ class FileServerTests(unittest.TestCase):
             nav.sound = Mock()
             nav.section = nav.sections.index('DATA')
             self.assertEqual(nav.data_index, 1)
-            self.assertEqual(nav.data_pages(), [('root', 'ROOT'), ('home', 'HOME'), ('network', 'NETWORK'), ('add', '+ Server')])
+            self.assertEqual(nav.data_pages(), [('root', 'ROOT'), ('home', 'HOME'), ('add', '+ Server')])
             nav.selected['home'] = 3
             nav.switch_data_page(curses.KEY_LEFT)
             self.assertEqual(nav.data_index, 0)
@@ -40,9 +40,43 @@ class FileServerTests(unittest.TestCase):
             self.assertEqual(nav.data_pages()[nav.data_index], (server['id'], 'NAS'))
             self.assertEqual(nav.rows()[0], 'server')
             nav.switch_data_page(curses.KEY_RIGHT)
-            self.assertEqual(nav.data_pages()[nav.data_index][0], 'network')
-            nav.switch_data_page(curses.KEY_RIGHT)
             self.assertEqual(nav.rows()[2], ['+ Server'])
+
+    def test_network_appears_only_with_servers_and_keeps_selection(self):
+        with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ, {'XDG_CONFIG_HOME': folder}):
+            nav = Navigator(Mock())
+            nav.data_pages()
+            nav.data_index = 2  # + Server
+            nav.discovered = [{'name': 'NAS', 'uri': 'smb://nas/'}]
+            pages = nav.data_pages()
+            self.assertIn(('network', 'NETWORK'), pages)
+            self.assertEqual(pages[nav.data_index][0], 'add')
+            nav.data_index = 2  # Network
+            nav.discovered = []
+            pages = nav.data_pages()
+            self.assertNotIn(('network', 'NETWORK'), pages)
+            self.assertEqual(pages[nav.data_index][0], 'home')
+
+    def test_generic_network_shortcuts_do_not_count_as_servers(self):
+        from network_discovery import discovered_servers
+        nas = {'name': 'NAS', 'uri': 'smb://nas/'}
+        items = [{'name': 'Windows Network', 'uri': 'smb:///'},
+                 {'name': 'Network', 'uri': 'network:///'}, nas]
+        self.assertEqual(discovered_servers(items), [nas])
+
+    def test_discovery_status_does_not_use_rpc_error_key(self):
+        import sys
+        import time
+        from types import SimpleNamespace
+        from network_discovery import Discovery
+        discovery = Discovery(None)
+        discovery.cache['network:///'] = {
+            'items': [], 'loading': False, 'error': '', 'updated': time.monotonic()}
+        repository = SimpleNamespace(Gio=Mock(), GLib=Mock(), Gtk=Mock())
+        with patch.dict(sys.modules, {'gi.repository': repository}):
+            result = discovery.browse('network:///')
+        self.assertNotIn('error', result)
+        self.assertEqual(result, {'items': [], 'loading': False, 'message': ''})
 
 
 if __name__ == '__main__':
