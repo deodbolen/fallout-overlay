@@ -58,6 +58,7 @@ class Host:
         if visual: self.window.set_visual(visual)
         self.window.set_app_paintable(True)
         self.window.connect('draw',self.clear_window)
+        self.window.connect('key-press-event',self.background_shortcut)
         self.window.set_decorated(False); self.window.set_keep_above(True)
         self.window.connect('delete-event',self.delete)
         self.window.connect('destroy',lambda *args: Gtk.main_quit())
@@ -73,6 +74,14 @@ class Host:
         self.pixbuf=GdkPixbuf.Pixbuf.new_from_file(str(ROOT/'assets/navigator-background.svg'))
         self.stack=Gtk.Stack(); self.stack.set_transition_type(Gtk.StackTransitionType.NONE)
         overlay.add_overlay(self.stack)
+        self.background_notice=Gtk.Label()
+        self.background_notice.set_halign(Gtk.Align.END)
+        self.background_notice.set_valign(Gtk.Align.START)
+        self.background_notice.set_margin_top(8); self.background_notice.set_margin_end(12)
+        self.background_notice.set_no_show_all(True)
+        overlay.add_overlay(self.background_notice)
+        overlay.set_overlay_pass_through(self.background_notice,True)
+        self.background_notice_timer=None
         self.static_until=0; self.static_timer=None
         self.footer=Gtk.Label(label='Ctrl+]  Navigator  |  Ctrl+↑/↓  Sessions  |  Ctrl+Shift+W  Close  |  Ctrl+Shift+C/V  Copy/Paste')
         self.footer.set_xalign(0); self.footer.set_margin_start(8); self.footer.set_margin_end(8)
@@ -129,7 +138,6 @@ class Host:
         terminal.connect('draw',self.draw_background)
         terminal.connect_after('draw',self.draw_static)
         terminal.connect('button-press-event',self.terminal_menu)
-        terminal.connect('key-press-event',self.background_shortcut)
         terminal.connect('key-press-event',self.typing_sound)
         terminal.set_font(Pango.FontDescription(font))
         terminal.set_color_foreground(color('#b6ffa3'))
@@ -155,6 +163,18 @@ class Host:
             navigator_settings.save_transparent(enabled)
             self.transparent=enabled
             self.window.queue_draw()
+            self.background.queue_draw()
+            for child in self.stack.get_children(): child.queue_draw()
+            if enabled and not self.window.get_screen().is_composited():
+                message='Transparency needs XFCE compositing enabled'
+            else: message='Background: '+('TRANSPARENT' if enabled else 'OPAQUE')
+            self.background_notice.set_markup('<span background="#050a06" foreground="#9dff72" weight="bold">  '+message+'  </span>')
+            self.background_notice.show()
+            if self.background_notice_timer: GLib.source_remove(self.background_notice_timer)
+            def clear_notice():
+                self.background_notice.hide(); self.background_notice_timer=None
+                return False
+            self.background_notice_timer=GLib.timeout_add(2500,clear_notice)
             return True
         return False
 
