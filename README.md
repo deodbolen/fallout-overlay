@@ -38,6 +38,7 @@ In Settings, select **Section shortcut** and press Enter to toggle between **Ctr
 | Control | Action |
 | --- | --- |
 | Ctrl + Left / Right | Switch Home, Data, SSH, Terminal, Applications, Settings |
+| Left / Right in Data | Switch Root, Home, saved servers, and + Server |
 | Up / Down, Enter | Select and open |
 | Backspace / Escape | Return or cancel |
 | Ctrl+M on a file | File actions |
@@ -48,6 +49,8 @@ In Settings, select **Section shortcut** and press Enter to toggle between **Ctr
 | Ctrl+Up / Ctrl+Down | Switch running terminal sessions |
 | Ctrl+Shift+C / V | Copy / paste terminal text |
 | Q in the navigator | Exit; confirm closing active sessions |
+
+Data starts in your home directory. Press Left for `/`, or Right for saved remote servers and **+ Server**. Add a name and an address such as `smb://nas/shared` or `sftp://user@server/home/user`, then press Enter on the server page to connect. Authentication uses the desktop prompt; passwords are not stored in the server catalog. Rerun the installer to install the required GVfs backends and FUSE support.
 
 Text documents open in embedded Nano. GUI applications hide the navigator; F12 brings it back. Sessions persist while hidden but close when the navigator quits.
 

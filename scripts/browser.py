@@ -15,6 +15,7 @@ from path_completion import directory_matches, complete_directory
 import crt_settings
 import sound_settings
 import navigator_settings
+import file_servers
 from section_transition import animate as animate_section
 from file_actions import source_file, new_name, destination, copy_file, move_file, compress_file, file_info, create_entry
 import configparser
@@ -32,6 +33,11 @@ class Navigator:
     def __init__(self,screen):
         self.screen=screen
         self.tree=Tree(Path.home())
+        self.tree.expanded.add(self.tree.root)
+        self.data_index=1
+        self.data_trees={'home':self.tree,'root':Tree(Path('/'))}
+        self.data_trees['root'].expanded.add(Path('/'))
+        self.data_selections={}
         self.catalog=Catalog()
         if os.environ.get('FALLOUT_EMBEDDED_SOCKET'):
             from embedded_client import Sessions as EmbeddedSessions
@@ -78,7 +84,7 @@ class Navigator:
             try: self.screen.addnstr(y,0,text,w-1,attr)
             except curses.error: pass
 
-    def draw(self,title,labels,selected=0,footer='CTRL+←→ SECTION  ↑↓ ITEM  ENTER OPEN  ESC BACK',detail='',refresh=True):
+    def draw(self,title,labels,selected=0,footer='CTRL+←→ SECTION  ←→ DATA PAGE  ↑↓ ITEM  ENTER OPEN  ESC BACK',detail='',refresh=True):
         if refresh: self.native_clock('')
         h,w=self.screen.getmaxyx(); self.screen.erase()
         tabs='   '.join(('[  '+s+'  ]' if s=='⚙️' else '['+s+']') if i==self.section else s for i,s in enumerate(self.sections))
@@ -271,16 +277,58 @@ class Navigator:
                 except (OSError,ValueError,KeyError,configparser.Error): continue
         return sorted((v for v in apps.values() if v),key=lambda a:a['name'].casefold())
 
+    def switch_data_page(self,key):
+        if self.sections[self.section]!='DATA' or key not in (curses.KEY_LEFT,curses.KEY_RIGHT): return False
+        self.data_selections[self.data_index]=self.selected.get('home',0)
+        self.data_index=max(0,min(len(self.data_pages())-1,self.data_index+(1 if key==curses.KEY_RIGHT else -1)))
+        self.selected['home']=self.data_selections.get(self.data_index,0)
+        self.message=''
+        self.sound('select')
+        return True
+
+    def data_pages(self):
+        return [('root','ROOT'),('home','HOME')]+[(server['id'],server['name']) for server in file_servers.servers()]+[('add','+ Server')]
+
+    def add_file_server(self):
+        name=self.text('SERVER NAME')
+        if name is None: return
+        uri=self.text('SERVER ADDRESS // smb://server/share OR sftp://user@server/path')
+        if uri is None: return
+        server=file_servers.add_server(name,uri)
+        self.data_index=next(i for i,(identity,_) in enumerate(self.data_pages()) if identity==server['id'])
+        self.message='Server saved. Press Enter to connect.'
+
+    def connect_file_server(self,server):
+        if not os.environ.get('FALLOUT_EMBEDDED_SOCKET'):
+            raise ValueError('Remote servers require the embedded navigator. Launch with F12.')
+        from embedded_client import request
+        self.draw('CONNECTING // '+server['name'],[],detail='Complete the desktop authentication prompt if requested.')
+        result=request('mount_server',uri=server['uri'])
+        root=Path(result['path'])
+        if not root.is_dir(): raise ValueError('The server location is not an accessible directory.')
+        tree=Tree(root); tree.expanded.add(root)
+        self.data_trees[server['id']]=tree
+        self.selected['home']=0
+        self.message='Connected to '+server['name']
+
     def rows(self):
         if self.sections[self.section]=='HOME':
             return 'clock','LOCAL TIME',[],[]
         if self.sections[self.section]=='DATA':
+            pages=self.data_pages()
+            identity,label=pages[self.data_index]
+            title='DATA // '+'   '.join('['+name+']' if i==self.data_index else name for i,(_,name) in enumerate(pages))
+            if identity=='add': return 'addserver',title,['+ Server'],[]
+            if identity not in self.data_trees:
+                server=next(server for server in file_servers.servers() if server['id']==identity)
+                return 'server',title,['Connect to '+server['name'],server['uri']],[server]
+            self.tree=self.data_trees[identity]
             rows=self.tree.rows()
             labels=[]
             for path,depth,directory in rows:
                 marker=('[-]' if path in self.tree.expanded else '[+]') if directory else ' · '
-                labels.append('  '*min(depth,20)+marker+' '+('HOME' if path==self.tree.root else path.name+('/' if directory else '')))
-            return 'home','DIRECTORY TREE',labels,rows
+                labels.append('  '*min(depth,20)+marker+' '+(label if path==self.tree.root else path.name+('/' if directory else '')))
+            return 'home',title,labels,rows
         if self.sections[self.section]=='SSH':
             data=self.catalog.read()
             if self.page=='ssh': return 'ssh','SSH',['HOST','SSH-KEY'],[]
@@ -471,6 +519,10 @@ class Navigator:
                     except (ValueError,TypeError): self.message='Enter a number from 0 to 100.'
 
     def activate(self,page,index,items):
+        if page=='addserver':
+            self.add_file_server(); return
+        if page=='server':
+            self.connect_file_server(items[0]); return
         if page=='home':
             path,depth,directory=items[index]
             if directory:
@@ -537,7 +589,7 @@ class Navigator:
                     index=max(0,min(self.selected.get(page,0),len(labels)-1))
                     self.selected[page]=index
                     detail=(self.message or str(items[index][0])) if page=='home' else self.message
-                    footer='CTRL+←→ SECTION  ↑↓ ITEM  ENTER OPEN  CTRL+M MENU  CTRL+N NEW  O OPEN / SHELL  Q EXIT' if page=='home' else 'CTRL+←→ CHANGE SECTION  ↑↓ SELECT ITEM  ENTER OPEN  BACKSPACE BACK  Q EXIT'
+                    footer='CTRL+←→ SECTION  ←→ DATA PAGE  ↑↓ ITEM  ENTER OPEN  CTRL+M MENU  CTRL+N NEW  O OPEN / SHELL  Q EXIT' if page=='home' else 'CTRL+←→ CHANGE SECTION  ↑↓ SELECT ITEM  ENTER OPEN  BACKSPACE BACK  Q EXIT'
                     redraw=self.draw_clock if page=='clock' else lambda: self.draw(title,labels,index,footer,detail)
                     if self.transition_pending:
                         self.transition_pending=False
@@ -549,6 +601,7 @@ class Navigator:
                     self.message=''
                     self.navigation_sound(key)
                     if self.switch_section(key): pass
+                    elif self.switch_data_page(key): pass
                     elif key in (curses.KEY_DOWN,'j'): self.selected[page]=min(len(labels)-1,index+1)
                     elif key in (curses.KEY_UP,'k'): self.selected[page]=max(0,index-1)
                     elif key==curses.KEY_NPAGE: self.selected[page]=min(len(labels)-1,index+max(1,self.screen.getmaxyx()[0]-6))

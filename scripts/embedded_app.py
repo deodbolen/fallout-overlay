@@ -26,7 +26,7 @@ except ValueError:
     GIRepository.Repository.prepend_search_path(str(ROOT/'vendor/typelib'))
     gi.require_version('Vte','2.91')
 gi.require_foreign('cairo')
-from gi.repository import Gtk,Gdk,GLib,Vte,Pango,PangoCairo,GdkPixbuf
+from gi.repository import Gtk,Gdk,GLib,Vte,Pango,PangoCairo,GdkPixbuf,Gio
 from ssh_manager import atomic_json,state_dir
 from sounds import Sounds
 import navigator_settings
@@ -404,6 +404,31 @@ class Host:
             except OSError: break
             threading.Thread(target=self.handle,args=(connection,),daemon=True).start()
 
+    def mount_server(self,uri,reply):
+        from file_servers import validate_uri
+        location=Gio.File.new_for_uri(validate_uri(uri))
+        operation=Gtk.MountOperation.new(self.window)
+        operation.set_password_save(Gio.PasswordSave.NEVER)
+        attempts=0
+        def resolve_path():
+            nonlocal attempts
+            path=location.get_path()
+            if path:
+                reply({'path':path}); return False
+            attempts+=1
+            if attempts>=20:
+                reply({'error':'Server mounted but no filesystem path is available. Install gvfs-fuse and log out/in, then reconnect.'})
+                return False
+            return True
+        def mounted(source,result):
+            try:
+                source.mount_enclosing_volume_finish(result)
+            except GLib.Error as error:
+                if not error.matches(Gio.io_error_quark(),Gio.IOErrorEnum.ALREADY_MOUNTED):
+                    reply({'error':error.message}); return
+            if resolve_path(): GLib.timeout_add(100,resolve_path)
+        location.mount_enclosing_volume(Gio.MountMountFlags.NONE,operation,None,mounted)
+
     def handle(self,connection):
         with connection:
             try:
@@ -417,6 +442,7 @@ class Host:
                     try:
                         command=request['command']
                         if command=='launch': reply(self.launch(request['action'],request['label'],request.get('details',{})))
+                        elif command=='mount_server': self.mount_server(request['uri'],reply)
                         elif command=='clock':
                             self.clock_value=str(request.get('value',''))[:5]
                             self.update_power_button()
