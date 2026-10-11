@@ -232,6 +232,12 @@ class Host:
 
     def nav_keys(self,widget,event):
         modifiers=Gdk.ModifierType.CONTROL_MASK|Gdk.ModifierType.MOD1_MASK|Gdk.ModifierType.SUPER_MASK
+        if event.keyval in (Gdk.KEY_Left,Gdk.KEY_Right) and event.state&modifiers:
+            chosen=Gdk.ModifierType.SUPER_MASK if navigator_settings.section_modifier()=='super' else Gdk.ModifierType.CONTROL_MASK
+            if event.state&modifiers==chosen and not event.state&Gdk.ModifierType.SHIFT_MASK:
+                # Normalize the chosen modifier for the curses navigator.
+                widget.feed_child(b'\x1b[1;5D' if event.keyval==Gdk.KEY_Left else b'\x1b[1;5C')
+            return True
         if self.power_button.get_visible() and not event.state&modifiers:
             if event.keyval in (Gdk.KEY_p,Gdk.KEY_P):
                 self.open_power_menu(self.power_button); return True

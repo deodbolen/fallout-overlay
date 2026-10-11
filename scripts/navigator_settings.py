@@ -38,3 +38,20 @@ def save_transparent(enabled):
     data = json.loads(path.read_text()) if path.exists() else {}
     data['navigator_transparent'] = bool(enabled)
     atomic_json(path, data)
+
+
+def section_modifier():
+    try:
+        data = json.loads((config_dir() / 'settings.json').read_text())
+        return 'super' if data.get('section_modifier') == 'super' else 'ctrl'
+    except (OSError, ValueError, AttributeError):
+        return 'ctrl'
+
+
+def save_section_modifier(value):
+    if value not in ('ctrl', 'super'):
+        raise ValueError('Choose Ctrl or Super.')
+    path = config_dir() / 'settings.json'
+    data = json.loads(path.read_text()) if path.exists() else {}
+    data['section_modifier'] = value
+    atomic_json(path, data)

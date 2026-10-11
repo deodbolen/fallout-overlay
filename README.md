@@ -31,6 +31,8 @@ The navigator background is transparent by default, showing your desktop behind 
 
 The LightDM GTK login screen uses a solid black background after installation. Its original configuration is backed up under `/var/lib/fallout-ui/greeter-background` and restored by `restore.sh`.
 
+In Settings, select **Section shortcut** and press Enter to toggle between **Ctrl + Left/Right** (default) and **Super + Left/Right**. The choice saves and applies immediately in the embedded navigator.
+
 ## Everyday controls
 
 | Control | Action |

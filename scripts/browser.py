@@ -88,6 +88,7 @@ class Navigator:
         for index,label in enumerate(labels[offset:offset+visible],offset):
             self.put(3+index-offset,label,curses.A_REVERSE if index==selected else 0)
         self.put(h-2,detail or self.message)
+        footer=footer.replace('CTRL+←→',navigator_settings.section_modifier().upper()+'+←→')
         self.put(h-1,footer)
         if refresh: self.screen.refresh()
 
@@ -294,7 +295,7 @@ class Navigator:
         if self.sections[self.section]=='⚙️':
             status='Enabled' if crt_settings.running() and crt_settings.enabled() else 'Disabled'
             animation='Enabled' if crt_settings.running() and crt_settings.animation_enabled() else 'Disabled'
-            return 'settings','⚙ SETTINGS',['CRT overlay: '+status,'CRT scan animation: '+animation,'Volume','Navigator font size: '+str(navigator_settings.font_size())+' pt','Transparent background: '+('Enabled' if navigator_settings.transparent() else 'Disabled')],[]
+            return 'settings','⚙ SETTINGS',['CRT overlay: '+status,'CRT scan animation: '+animation,'Volume','Navigator font size: '+str(navigator_settings.font_size())+' pt','Transparent background: '+('Enabled' if navigator_settings.transparent() else 'Disabled'),'Section shortcut: '+navigator_settings.section_modifier().title()+' + Left/Right'],[]
         if self.apps is None: self.apps=self.applications()
         return 'apps','APPLICATIONS',[a['name'] for a in self.apps] or ['No applications'],self.apps
 
@@ -498,6 +499,9 @@ class Navigator:
                         session.close(); self.sessions.items.remove(session)
                 else: self.attach_session(session)
         elif page=='settings':
+            if index==5:
+                navigator_settings.save_section_modifier('super' if navigator_settings.section_modifier()=='ctrl' else 'ctrl')
+                return
             if index==4:
                 navigator_settings.save_transparent(not navigator_settings.transparent())
                 return
