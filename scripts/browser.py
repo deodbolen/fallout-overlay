@@ -56,8 +56,10 @@ class Navigator:
         elif key=='\x1b': self.sound('cancel')
 
     def switch_section(self,key):
-        if key not in (curses.KEY_LEFT,curses.KEY_RIGHT): return False
-        step=1 if key==curses.KEY_RIGHT else -1
+        if not isinstance(key,int) or key in (curses.KEY_LEFT,curses.KEY_RIGHT): return False
+        name=curses.keyname(key)
+        if name not in (b'kLFT5',b'kRIT5'): return False
+        step=1 if name==b'kRIT5' else -1
         self.section=(self.section+step)%len(self.sections)
         self.sound('static'); self.sound('select')
         self.transition_pending=True
@@ -76,7 +78,7 @@ class Navigator:
             try: self.screen.addnstr(y,0,text,w-1,attr)
             except curses.error: pass
 
-    def draw(self,title,labels,selected=0,footer='←→ SECTION  ↑↓ ITEM  ENTER OPEN  ESC BACK',detail='',refresh=True):
+    def draw(self,title,labels,selected=0,footer='CTRL+←→ SECTION  ↑↓ ITEM  ENTER OPEN  ESC BACK',detail='',refresh=True):
         if refresh: self.native_clock('')
         h,w=self.screen.getmaxyx(); self.screen.erase()
         tabs='   '.join(('[  '+s+'  ]' if s=='⚙️' else '['+s+']') if i==self.section else s for i,s in enumerate(self.sections))
@@ -531,7 +533,7 @@ class Navigator:
                     index=max(0,min(self.selected.get(page,0),len(labels)-1))
                     self.selected[page]=index
                     detail=(self.message or str(items[index][0])) if page=='home' else self.message
-                    footer='←→ SECTION  ↑↓ ITEM  ENTER OPEN  CTRL+M MENU  CTRL+N NEW  O OPEN / SHELL  Q EXIT' if page=='home' else '←→ CHANGE SECTION  ↑↓ SELECT ITEM  ENTER OPEN  BACKSPACE BACK  Q EXIT'
+                    footer='CTRL+←→ SECTION  ↑↓ ITEM  ENTER OPEN  CTRL+M MENU  CTRL+N NEW  O OPEN / SHELL  Q EXIT' if page=='home' else 'CTRL+←→ CHANGE SECTION  ↑↓ SELECT ITEM  ENTER OPEN  BACKSPACE BACK  Q EXIT'
                     redraw=self.draw_clock if page=='clock' else lambda: self.draw(title,labels,index,footer,detail)
                     if self.transition_pending:
                         self.transition_pending=False

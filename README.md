@@ -35,7 +35,7 @@ The LightDM GTK login screen uses a solid black background after installation. I
 
 | Control | Action |
 | --- | --- |
-| Left / Right | Switch Home, SSH, Terminal, Applications, Settings |
+| Ctrl + Left / Right | Switch Home, Data, SSH, Terminal, Applications, Settings |
 | Up / Down, Enter | Select and open |
 | Backspace / Escape | Return or cancel |
 | Ctrl+M on a file | File actions |

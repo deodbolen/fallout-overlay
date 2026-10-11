@@ -11,10 +11,16 @@ import crt_settings
 class SettingsTests(unittest.TestCase):
     def test_right_navigation_reaches_settings(self):
         navigator=Navigator(Mock()); navigator.sound=Mock()
-        for expected in (1,2,3,4,0):
-            navigator.switch_section(curses.KEY_RIGHT)
-            self.assertEqual(navigator.section,expected)
-        navigator.section=4
+        self.assertFalse(navigator.switch_section(curses.KEY_RIGHT))
+        self.assertFalse(navigator.switch_section(curses.KEY_LEFT))
+        with patch('curses.keyname',return_value=b'kRIT5'):
+            for expected in (1,2,3,4,5,0):
+                navigator.switch_section(999)
+                self.assertEqual(navigator.section,expected)
+        with patch('curses.keyname',return_value=b'kLFT5'):
+            navigator.switch_section(998)
+            self.assertEqual(navigator.section,5)
+        navigator.section=5
         with patch('crt_settings.running',return_value=False):
             self.assertEqual(navigator.rows()[0],'settings')
             self.assertIn('Disabled',navigator.rows()[2][0])
