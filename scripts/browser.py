@@ -16,6 +16,7 @@ import crt_settings
 import sound_settings
 import navigator_settings
 import file_servers
+from urllib.parse import urlsplit
 from section_transition import animate as animate_section
 from file_actions import source_file, new_name, destination, copy_file, move_file, compress_file, file_info, create_entry
 import configparser
@@ -35,6 +36,7 @@ class Navigator:
         self.tree=Tree(Path.home())
         self.tree.expanded.add(self.tree.root)
         self.data_index=1
+        self.network_history=['network:///']
         self.data_trees={'home':self.tree,'root':Tree(Path('/'))}
         self.data_trees['root'].expanded.add(Path('/'))
         self.data_selections={}
@@ -287,7 +289,7 @@ class Navigator:
         return True
 
     def data_pages(self):
-        return [('root','ROOT'),('home','HOME')]+[(server['id'],server['name']) for server in file_servers.servers()]+[('add','+ Server')]
+        return [('root','ROOT'),('home','HOME')]+[(server['id'],server['name']) for server in file_servers.servers()]+[('network','NETWORK'),('add','+ Server')]
 
     def add_file_server(self):
         name=self.text('SERVER NAME')
@@ -318,6 +320,15 @@ class Navigator:
             pages=self.data_pages()
             identity,label=pages[self.data_index]
             title='DATA // '+'   '.join('['+name+']' if i==self.data_index else name for i,(_,name) in enumerate(pages))
+            if identity=='network':
+                if not os.environ.get('FALLOUT_EMBEDDED_SOCKET'):
+                    return 'network',title,['Network discovery requires the embedded navigator'],[]
+                from embedded_client import request
+                result=request('browse_network',uri=self.network_history[-1])
+                entries=result['items']
+                status='Searching…' if result['loading'] else result['error'] or ('No SMB servers found' if not entries else 'Select a server or share')
+                self.message=status
+                return 'network',title,['Refresh network']+[entry['name'] for entry in entries],entries
             if identity=='add': return 'addserver',title,['+ Server'],[]
             if identity not in self.data_trees:
                 server=next(server for server in file_servers.servers() if server['id']==identity)
@@ -519,6 +530,22 @@ class Navigator:
                     except (ValueError,TypeError): self.message='Enter a number from 0 to 100.'
 
     def activate(self,page,index,items):
+        if page=='network':
+            if not os.environ.get('FALLOUT_EMBEDDED_SOCKET'): return
+            from embedded_client import request
+            if index==0:
+                request('browse_network',uri=self.network_history[-1],refresh=True)
+            else:
+                entry=items[index-1]; parsed=urlsplit(entry['uri'])
+                if parsed.scheme=='smb' and parsed.hostname and parsed.path.strip('/'):
+                    saved=next((server for server in file_servers.servers() if server['uri']==entry['uri']),None)
+                    server=saved or file_servers.add_server(entry['name'],entry['uri'])
+                    self.data_index=next(i for i,(identity,_) in enumerate(self.data_pages()) if identity==server['id'])
+                    self.connect_file_server(server)
+                else:
+                    self.network_history.append(entry['uri'])
+                    self.selected['network']=0
+            return
         if page=='addserver':
             self.add_file_server(); return
         if page=='server':
@@ -615,6 +642,8 @@ class Navigator:
                             path=items[index][0]
                             if path in self.tree.expanded: self.tree.expanded.remove(path)
                             else: self.selected[page]=next((i for i,r in enumerate(items) if r[0]==path.parent),0)
+                        elif page=='network' and len(self.network_history)>1:
+                            self.network_history.pop(); self.selected['network']=0
                         elif page=='savedkeys': self.page='keys'
                         elif page in ('hosts','keys'): self.page='ssh'
                     elif key=='\x0e' and page=='home':

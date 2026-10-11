@@ -29,7 +29,7 @@ class FileServerTests(unittest.TestCase):
             nav.sound = Mock()
             nav.section = nav.sections.index('DATA')
             self.assertEqual(nav.data_index, 1)
-            self.assertEqual(nav.data_pages(), [('root', 'ROOT'), ('home', 'HOME'), ('add', '+ Server')])
+            self.assertEqual(nav.data_pages(), [('root', 'ROOT'), ('home', 'HOME'), ('network', 'NETWORK'), ('add', '+ Server')])
             nav.selected['home'] = 3
             nav.switch_data_page(curses.KEY_LEFT)
             self.assertEqual(nav.data_index, 0)
@@ -39,6 +39,8 @@ class FileServerTests(unittest.TestCase):
             nav.switch_data_page(curses.KEY_RIGHT)
             self.assertEqual(nav.data_pages()[nav.data_index], (server['id'], 'NAS'))
             self.assertEqual(nav.rows()[0], 'server')
+            nav.switch_data_page(curses.KEY_RIGHT)
+            self.assertEqual(nav.data_pages()[nav.data_index][0], 'network')
             nav.switch_data_page(curses.KEY_RIGHT)
             self.assertEqual(nav.rows()[2], ['+ Server'])
 
