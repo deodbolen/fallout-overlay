@@ -488,7 +488,7 @@ class Navigator:
                 else: return
 
     def scp_file(self,path):
-        user=username({}); address=''; directory='/'; index=0
+        user=username({}); address=''; directory='~/'; index=0
         while True:
             self.draw('SCP // '+path.name,['User: '+user,'Host: '+(address or '(enter hostname or IP)'),
                       'Path: '+directory,'Send','Cancel'],index,
