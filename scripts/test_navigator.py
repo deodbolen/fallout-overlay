@@ -1,4 +1,5 @@
 import json
+import shlex
 import os
 from pathlib import Path
 import subprocess
@@ -46,6 +47,28 @@ class NavigatorTests(unittest.TestCase):
             self.assertEqual(auth.stat().st_mode & 0o777,0o600)
             subprocess.run(['sh','-c',remote_command('~/.ssh','AAAA','revoke')],env=env,check=True)
             self.assertNotIn('AAAA',auth.read_text()); self.assertIn(other,auth.read_text())
+
+    def test_proxmox_link_push_preserves_shared_keys_and_link(self):
+        with tempfile.TemporaryDirectory() as d:
+            folder=Path(d)/'.ssh'; folder.mkdir()
+            shared=Path(d)/'cluster-keys'; shared.write_text('ssh-ed25519 BBBB cluster')
+            auth=folder/'authorized_keys'; auth.symlink_to(shared)
+            def execute(mode):
+                script=shlex.split(remote_command(str(folder),'AAAA',mode,'ssh-ed25519 AAAA added'))[2]
+                # Redirect only the Proxmox allowlist to this isolated fixture.
+                script=script.replace('/etc/pve/priv/authorized_keys',shlex.quote(str(shared.resolve())))
+                return subprocess.run(['sh','-c',script],capture_output=True,text=True)
+            for _ in range(2):
+                result=execute('push'); self.assertEqual(result.returncode,0,result.stderr)
+            self.assertTrue(auth.is_symlink())
+            self.assertIn('BBBB cluster',shared.read_text())
+            self.assertEqual(shared.read_text().count('AAAA added'),1)
+            before=shared.read_text()
+            self.assertNotEqual(execute('revoke').returncode,0)
+            self.assertEqual(shared.read_text(),before)
+            refused=subprocess.run(['sh','-c',remote_command(str(folder),'CCCC','push','ssh-ed25519 CCCC refused')],capture_output=True,text=True)
+            self.assertNotEqual(refused.returncode,0)
+            self.assertEqual(shared.read_text(),before)
 
     def test_remote_directory_is_quoted(self):
         with tempfile.TemporaryDirectory() as d:

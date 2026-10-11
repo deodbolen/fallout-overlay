@@ -143,7 +143,20 @@ file="$directory/authorized_keys"
     if mode=='push':
         script+='mkdir -p "$directory"\nchmod 700 "$directory"\n'
     else: script+='[ -f "$file" ] || exit 0\n'
-    script+='''[ ! -L "$file" ] || { echo 'Refusing a symlinked authorized_keys file.' >&2; exit 1; }
+    script+='''managed=0
+if [ -L "$file" ]; then
+    resolved=$(readlink -f "$file")
+    if [ "$resolved" = /etc/pve/priv/authorized_keys ] && [ -f "$file" ]; then
+        managed=1
+    else
+        echo 'Refusing an unrecognized symlinked authorized_keys file.' >&2; exit 1
+    fi
+fi
+'''
+    if mode=='revoke':
+        script+='''[ "$managed" = 0 ] || { echo 'Proxmox cluster key file: automatic revocation is disabled. Remove only this key through cluster administration.' >&2; exit 1; }
+'''
+    script+='''
 lock="$directory/.fallout-key-lock"
 mkdir "$lock" 2>/dev/null || { echo 'Key file is busy; retry later.' >&2; exit 1; }
 tmp=''
@@ -152,6 +165,12 @@ trap 'test -z "$tmp" || rm -f "$tmp"; rmdir "$lock"' EXIT HUP INT TERM
     quoted_blob=shlex.quote(blob)
     if mode=='push':
         script+=f'''if [ -f "$file" ] && awk -v key={quoted_blob} '{{for(i=1;i<=NF;i++) if($i==key) found=1}} END {{exit !found}}' "$file"; then exit 0; fi
+'''
+        script+=f'''if [ "$managed" = 1 ]; then
+    printf '\\n%s\\n' {shlex.quote(line)} >> "$file"
+    echo 'Public key added to the shared Proxmox cluster key file; symlink preserved.'
+    exit 0
+fi
 '''
     script+='tmp=$(mktemp "$directory/.authorized_keys.XXXXXX")\n'
     if mode=='push':
