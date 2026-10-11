@@ -45,6 +45,7 @@ In Settings, select **Section shortcut** and press Enter to toggle between **Ctr
 | Ctrl+N on a directory | Create a file or directory |
 | O | Open a document or start a shell in a directory |
 | H | Toggle hidden files |
+| Ctrl+Shift+B | Toggle background transparency and save the setting |
 | Ctrl+Shift+W in a terminal | Close the active session and return to the navigator |
 | Ctrl+] in a terminal | Return to the navigator; keep the session running |
 | Ctrl+Up / Ctrl+Down | Switch running terminal sessions |

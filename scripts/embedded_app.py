@@ -129,6 +129,7 @@ class Host:
         terminal.connect('draw',self.draw_background)
         terminal.connect_after('draw',self.draw_static)
         terminal.connect('button-press-event',self.terminal_menu)
+        terminal.connect('key-press-event',self.background_shortcut)
         terminal.connect('key-press-event',self.typing_sound)
         terminal.set_font(Pango.FontDescription(font))
         terminal.set_color_foreground(color('#b6ffa3'))
@@ -145,6 +146,16 @@ class Host:
         context.set_operator(cairo.OPERATOR_SOURCE)
         context.set_source_rgba(0,0,0,0)
         context.paint(); context.restore()
+        return False
+
+    def background_shortcut(self,widget,event):
+        modifiers=Gdk.ModifierType.CONTROL_MASK|Gdk.ModifierType.SHIFT_MASK
+        if event.state&modifiers==modifiers and Gdk.keyval_to_lower(event.keyval)==Gdk.KEY_b:
+            enabled=not navigator_settings.transparent()
+            navigator_settings.save_transparent(enabled)
+            self.transparent=enabled
+            self.window.queue_draw()
+            return True
         return False
 
     def draw_background(self,widget,context):

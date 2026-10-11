@@ -378,7 +378,7 @@ class Navigator:
         if self.sections[self.section]=='⚙️':
             status='Enabled' if crt_settings.running() and crt_settings.enabled() else 'Disabled'
             animation='Enabled' if crt_settings.running() and crt_settings.animation_enabled() else 'Disabled'
-            return 'settings','⚙ SETTINGS',['CRT overlay: '+status,'CRT scan animation: '+animation,'Volume','Navigator font size: '+str(navigator_settings.font_size())+' pt','Transparent background: '+('Enabled' if navigator_settings.transparent() else 'Disabled'),'Section shortcut: '+navigator_settings.section_modifier().title()+' + Left/Right'],[]
+            return 'settings','⚙ SETTINGS',['CRT overlay: '+status,'CRT scan animation: '+animation,'Volume','Navigator font size: '+str(navigator_settings.font_size())+' pt','Transparent background (Ctrl+Shift+B): '+('Enabled' if navigator_settings.transparent() else 'Disabled'),'Section shortcut: '+navigator_settings.section_modifier().title()+' + Left/Right'],[]
         if self.apps is None: self.apps=self.applications()
         return 'apps','APPLICATIONS',[a['name'] for a in self.apps] or ['No applications'],self.apps
 
