@@ -488,34 +488,34 @@ class Navigator:
                 else: return
 
     def scp_file(self,path):
-        host=None; directory='~/'; index=0
+        user=username({}); address=''; directory='/'; index=0
         while True:
-            self.draw('SCP // '+path.name,['Server: '+(host['name'] if host else '(choose SSH host)'),
-                      'Remote directory: '+directory,'SEND','Cancel'],index,
+            self.draw('SCP // '+path.name,['User: '+user,'Host: '+(address or '(enter hostname or IP)'),
+                      'Path: '+directory,'Send','Cancel'],index,
+                      footer='↑↓ SELECT  ENTER EDIT / SELECT  ESC CANCEL',
                       detail=self.message or 'Copies the file. An existing remote file with the same name will be replaced.')
             key=self.menu_key()
             if key==curses.KEY_UP: index=max(0,index-1)
-            elif key==curses.KEY_DOWN: index=min(3,index+1)
+            elif key==curses.KEY_DOWN: index=min(4,index+1)
             elif key in ('\x1b',curses.KEY_BACKSPACE,'\x7f'): return
             elif key in ENTER:
-                if index==0:
-                    hosts=sorted(self.catalog.read()['hosts'],key=lambda item:item['name'].casefold())
-                    choice=self.menu('SCP DESTINATION',[item['name']+' // '+username(item)+'@'+item['address'] for item in hosts]+['+ Host','Cancel'])
-                    if choice is not None and choice<len(hosts): host=hosts[choice]
-                    elif choice==len(hosts): self.host_form()
-                elif index==1:
-                    value=self.text('REMOTE DIRECTORY',directory)
-                    if value is not None: directory=value
-                elif index==2:
-                    if host is None:
-                        self.message='Choose an SSH host first.'; continue
-                    keyfile=next((item for item in self.catalog.read()['keys'] if item['id']==host['key']),None)
+                if index<3:
+                    value=self.text(('USER','HOST // HOSTNAME OR IP','REMOTE PATH')[index],(user,address,directory)[index])
+                    if value is not None:
+                        if index==0: user=value
+                        elif index==1: address=value
+                        else: directory=value
+                elif index==3:
+                    catalog=self.catalog.read()
+                    saved=next((item for item in catalog['hosts'] if item['address']==address and username(item)==user),None)
+                    host={'name':address,'address':address,'user':user,'key':saved['key'] if saved else ''}
+                    keyfile=next((item for item in catalog['keys'] if item['id']==host['key']),None)
                     if host['key'] and keyfile is None:
                         self.message='The saved SSH key is missing. Edit the host in SSH settings.'; continue
                     try: argv=scp_args(path,host,directory,keyfile)
                     except (OSError,ValueError) as error:
                         self.message=str(error); continue
-                    self.launch('command','SCP: '+path.name+' → '+host['name'],argv=argv)
+                    self.launch('command','SCP: '+path.name+' → '+address,argv=argv)
                     return
                 else: return
 

@@ -105,6 +105,10 @@ def scp_args(source,host,directory,key=None):
     if not directory or any(ord(c)<32 for c in directory):
         raise ValueError('Enter a remote directory without control characters.')
     address=host['address']
+    if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9.:%_-]*',address):
+        raise ValueError('Enter a hostname or IP address without a user or port.')
+    if not re.fullmatch(r'[A-Za-z0-9_][A-Za-z0-9_.-]*',host.get('user','')):
+        raise ValueError('Enter a valid remote username.')
     if ':' in address and not address.startswith('['): address='['+address+']'
     remote=username(host)+'@'+address+':'+directory.rstrip('/')+'/'
     # Debian's OpenSSH scp uses SFTP by default; keep paths as literal arguments.
