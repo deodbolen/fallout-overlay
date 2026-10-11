@@ -124,6 +124,11 @@ class Session:
 
 class Sessions:
     def __init__(self): self.items=[]
+    def prune(self):
+        for session in list(self.items):
+            if session.process.poll() is not None:
+                session.close(); session.path.unlink(missing_ok=True)
+                self.items.remove(session)
     def launch(self,action,label,**details):
         session=Session(action,label,**details); self.items.append(session); return session
     def attach(self,screen,session,on_switch=lambda session: None):

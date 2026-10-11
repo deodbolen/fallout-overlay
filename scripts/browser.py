@@ -373,6 +373,7 @@ class Navigator:
             keys=sorted(data['keys'],key=lambda k:k['name'].casefold())
             return 'savedkeys','SAVED KEYS',[k['name'] for k in keys] or ['No saved keys'],keys
         if self.sections[self.section]=='TERMINAL':
+            self.sessions.prune()
             return 'terminal','TERMINAL // Ctrl+] detaches a live session',['+ Local terminal']+[s.label+' // '+s.status for s in self.sessions.items],self.sessions.items
         if self.sections[self.section]=='⚙️':
             status='Enabled' if crt_settings.running() and crt_settings.enabled() else 'Disabled'
@@ -635,10 +636,8 @@ class Navigator:
             if index==0: self.launch('shell','Local terminal',cwd=str(Path.home()))
             else:
                 session=items[index-1]
-                if session.status=='closed':
-                    if self.menu(session.label,['Remove from list','Cancel'])==0:
-                        session.close(); self.sessions.items.remove(session)
-                else: self.attach_session(session)
+                if session.status!='closed': self.attach_session(session)
+                self.sessions.prune()
         elif page=='settings':
             if index==5:
                 navigator_settings.save_section_modifier('super' if navigator_settings.section_modifier()=='ctrl' else 'ctrl')

@@ -74,7 +74,7 @@ class Host:
         self.stack=Gtk.Stack(); self.stack.set_transition_type(Gtk.StackTransitionType.NONE)
         overlay.add_overlay(self.stack)
         self.static_until=0; self.static_timer=None
-        self.footer=Gtk.Label(label='Ctrl+]  Navigator  |  Ctrl+↑/↓  Sessions  |  Ctrl+Shift+C  Copy  |  Ctrl+Shift+V  Paste')
+        self.footer=Gtk.Label(label='Ctrl+]  Navigator  |  Ctrl+↑/↓  Sessions  |  Ctrl+Shift+W  Close  |  Ctrl+Shift+C/V  Copy/Paste')
         self.footer.set_xalign(0); self.footer.set_margin_start(8); self.footer.set_margin_end(8)
         self.footer.set_margin_top(4); self.footer.set_margin_bottom(4)
         self.footer.set_name('session-reminder')
@@ -302,6 +302,9 @@ class Host:
         modifiers=Gdk.ModifierType.CONTROL_MASK|Gdk.ModifierType.SHIFT_MASK
         if event.state&modifiers==modifiers:
             key=Gdk.keyval_to_lower(event.keyval)
+            if key==Gdk.KEY_w:
+                if self.current is not None: self.close_session(self.current)
+                return True
             if key==Gdk.KEY_c:
                 widget.copy_clipboard_format(Vte.Format.TEXT); return True
             if key==Gdk.KEY_v:
@@ -362,8 +365,15 @@ class Host:
         self.show_session(active[(index+step)%len(active)])
 
     def child_exited(self,sid,status):
-        record=self.records[sid]; record['closed']=True
+        self.remove_session(sid)
+
+    def remove_session(self,sid):
+        record=self.records.pop(sid,None)
+        if record is None: return
+        record['closed']=True
         if self.current==sid: self.detach()
+        record['path'].unlink(missing_ok=True)
+        GLib.idle_add(record['terminal'].destroy)
 
     def refresh(self):
         if self.closed: return False
@@ -387,7 +397,9 @@ class Host:
 
     def close_session(self,sid):
         record=self.records.get(sid)
-        if not record or record['closed']: return
+        if not record: return
+        if record['closed']:
+            self.remove_session(sid); return
         try:
             pty=record['terminal'].get_pty()
             if pty:
@@ -397,8 +409,7 @@ class Host:
         if record['pid']:
             try: os.killpg(record['pid'],signal.SIGHUP)
             except OSError: pass
-        record['closed']=True
-        if self.current==sid: self.detach()
+        self.remove_session(sid)
 
     def serve(self):
         while not self.closed:
@@ -451,7 +462,7 @@ class Host:
                             self.update_power_button()
                             self.navigator.queue_draw(); reply({})
                         elif command=='choose_application': reply({'path':self.choose_application(request.get('initial',''))})
-                        elif command=='status': reply({'status':self.status(self.records[request['id']])})
+                        elif command=='status': reply({'status':self.status(self.records[request['id']]) if request['id'] in self.records else 'closed'})
                         elif command=='close': self.close_session(request['id']); reply({})
                         elif command=='attach':
                             if self.waiter: raise ValueError('A terminal is already attached.')

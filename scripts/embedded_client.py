@@ -28,6 +28,10 @@ class Session:
 
 class Sessions:
     def __init__(self): self.items=[]
+    def prune(self):
+        for session in list(self.items):
+            if session.status=='closed':
+                session.close(); self.items.remove(session)
     def launch(self,action,label,**details):
         session=Session(request('launch',action=action,label=label,details=details))
         self.items.append(session); return session

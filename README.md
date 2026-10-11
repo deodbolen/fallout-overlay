@@ -45,6 +45,7 @@ In Settings, select **Section shortcut** and press Enter to toggle between **Ctr
 | Ctrl+N on a directory | Create a file or directory |
 | O | Open a document or start a shell in a directory |
 | H | Toggle hidden files |
+| Ctrl+Shift+W in a terminal | Close the active session and return to the navigator |
 | Ctrl+] in a terminal | Return to the navigator; keep the session running |
 | Ctrl+Up / Ctrl+Down | Switch running terminal sessions |
 | Ctrl+Shift+C / V | Copy / paste terminal text |
@@ -54,7 +55,7 @@ Discovery runs quietly in Data. The **Network** page appears only when an SMB se
 
 Data starts in your home directory. Press Left for `/`, or Right for saved remote servers and **+ Server**. Add a name and an address such as `smb://nas/shared` or `sftp://user@server/home/user`, then press Enter on the server page to connect. Authentication uses the desktop prompt; passwords are not stored in the server catalog. Rerun the installer to install the required GVfs backends and FUSE support.
 
-Text documents open in embedded Nano. GUI applications hide the navigator; F12 brings it back. Sessions persist while hidden but close when the navigator quits.
+Text documents open in embedded Nano. GUI applications hide the navigator; F12 brings it back. Sessions persist while hidden but close when the navigator quits. Exited sessions are removed automatically. Completed transfers and errors remain visible until Enter dismisses them.
 
 ## Features and guide
 
