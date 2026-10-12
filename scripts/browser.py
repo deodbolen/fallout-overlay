@@ -553,11 +553,7 @@ class Navigator:
         elif choice==9: self.open_with(path)
 
     def update_settings(self):
-        choice=self.menu('UPDATE FROM REPOSITORY',['Check for updates','Update and restart','Cancel'],
-                         detail='Update runs install.sh, closes terminal sessions after success, and restarts the overlay.')
-        if choice not in (0,1): return
         command=['/usr/bin/python3',str(Path(__file__).with_name('update_app.py'))]
-        if choice==0: command.append('--check')
         env=dict(os.environ)
         env.pop('FALLOUT_EMBEDDED_SOCKET',None)
         env.pop('FALLOUT_SOUND_SOCKET',None)

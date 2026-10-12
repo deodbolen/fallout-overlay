@@ -33,7 +33,7 @@ The LightDM GTK login screen uses a solid black background after installation. I
 
 In Settings, select **Section shortcut** and press Enter to toggle between **Ctrl + Left/Right** (default) and **Super + Left/Right**. The choice saves and applies immediately in the embedded navigator.
 
-Use **Settings → Update** to check the configured Git upstream or choose **Update and restart**. Updating pulls with `--ff-only`, runs `./install.sh` in a separate terminal for sudo prompts, and closes active sessions and restarts the overlay after installation succeeds. Local changes and local commits must be resolved first. Git authentication uses the checkout’s configured remote.
+Select **Settings → Update** once to check the configured Git upstream. If no update is available it displays **System up to date**. If updates are available it automatically pulls with `--ff-only`, runs `./install.sh` in a separate terminal for sudo prompts, and closes active sessions and restarts the overlay after installation succeeds. Local changes and local commits must be resolved first. Git authentication uses the checkout’s configured remote.
 
 ## Everyday controls
 

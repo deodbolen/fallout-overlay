@@ -73,9 +73,10 @@ def main():
         except BlockingIOError:
             raise ValueError('An update is already running.')
         behind = check_updates()
-        print(f'{behind} new commit(s) available.' if behind else 'Already up to date.', flush=True)
-        if '--check' in sys.argv:
-            return
+        if not behind:
+            print('System up to date.', flush=True)
+            return False
+        print(f'{behind} new commit(s) available.', flush=True)
         print('Pulling latest version…', flush=True)
         subprocess.run(['git', '-C', str(ROOT), 'pull', '--ff-only'], check=True)
         print('Running installer. Enter your sudo password if prompted.', flush=True)
@@ -95,11 +96,12 @@ def main():
         print('Installation succeeded. Closing sessions and restarting the overlay…', flush=True)
         restart_overlay()
         print('Update complete.', flush=True)
+        return True
 
 
 if __name__ == '__main__':
     try:
-        main()
+        updated = main()
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
         print('\nUpdate stopped: ' + str(error), file=sys.stderr)
         if isinstance(error, subprocess.CalledProcessError) and error.stderr:
@@ -107,6 +109,6 @@ if __name__ == '__main__':
         try: input('\nPress Enter to close this update window. ')
         except (EOFError, KeyboardInterrupt): pass
         sys.exit(1)
-    if '--check' in sys.argv:
+    if not updated:
         try: input('\nPress Enter to close this window. ')
         except (EOFError, KeyboardInterrupt): pass

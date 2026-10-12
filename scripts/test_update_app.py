@@ -25,12 +25,12 @@ class UpdateTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'local commits'):
                 update_app.check_updates()
 
-    def test_check_only_never_installs_or_restarts(self):
+    def test_up_to_date_never_installs_or_restarts(self):
         with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ,{'XDG_RUNTIME_DIR':folder}), \
-                patch.object(sys,'argv',['update_app.py','--check']), \
-                patch('update_app.check_updates',return_value=2), \
+                patch.object(sys,'argv',['update_app.py']), \
+                patch('update_app.check_updates',return_value=0), \
                 patch('update_app.subprocess.run') as run, patch('update_app.restart_overlay') as restart:
-            update_app.main()
+            self.assertFalse(update_app.main())
             run.assert_not_called(); restart.assert_not_called()
 
     def test_installer_failure_does_not_restart(self):
