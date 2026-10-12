@@ -507,6 +507,9 @@ class Host:
                             if self.window.get_visible(): self.window.hide()
                             else: self.window.show(); self.window.present()
                             reply({})
+                        elif command=='shutdown_for_update':
+                            reply({})
+                            GLib.timeout_add(200,lambda: (self.shutdown(),False)[1])
                         else: raise ValueError('Unknown host command.')
                     except Exception as error: reply({'error':str(error)})
                     return False

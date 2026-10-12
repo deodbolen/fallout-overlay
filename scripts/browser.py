@@ -378,7 +378,7 @@ class Navigator:
         if self.sections[self.section]=='⚙️':
             status='Enabled' if crt_settings.running() and crt_settings.enabled() else 'Disabled'
             animation='Enabled' if crt_settings.running() and crt_settings.animation_enabled() else 'Disabled'
-            return 'settings','⚙ SETTINGS',['CRT overlay: '+status,'CRT scan animation: '+animation,'Volume','Navigator font size: '+str(navigator_settings.font_size())+' pt','Transparent background (Ctrl+Shift+B): '+('Enabled' if navigator_settings.transparent() else 'Disabled'),'Section shortcut: '+navigator_settings.section_modifier().title()+' + Left/Right'],[]
+            return 'settings','⚙ SETTINGS',['CRT overlay: '+status,'CRT scan animation: '+animation,'Volume','Navigator font size: '+str(navigator_settings.font_size())+' pt','Transparent background (Ctrl+Shift+B): '+('Enabled' if navigator_settings.transparent() else 'Disabled'),'Section shortcut: '+navigator_settings.section_modifier().title()+' + Left/Right','Update'],[]
         if self.apps is None: self.apps=self.applications()
         return 'apps','APPLICATIONS',[a['name'] for a in self.apps] or ['No applications'],self.apps
 
@@ -552,6 +552,19 @@ class Navigator:
         elif choice==8: self.open_gui(path)
         elif choice==9: self.open_with(path)
 
+    def update_settings(self):
+        choice=self.menu('UPDATE FROM REPOSITORY',['Check for updates','Update and restart','Cancel'],
+                         detail='Update runs install.sh, closes terminal sessions after success, and restarts the overlay.')
+        if choice not in (0,1): return
+        command=['/usr/bin/python3',str(Path(__file__).with_name('update_app.py'))]
+        if choice==0: command.append('--check')
+        env=dict(os.environ)
+        env.pop('FALLOUT_EMBEDDED_SOCKET',None)
+        env.pop('FALLOUT_SOUND_SOCKET',None)
+        subprocess.Popen(['xfce4-terminal','--disable-server','--title=Fallout Update',
+                          '--command='+shlex.join(command)],env=env,start_new_session=True)
+        self.message='Update window opened.'
+
     def font_settings(self):
         while True:
             size=navigator_settings.font_size()
@@ -639,6 +652,8 @@ class Navigator:
                 if session.status!='closed': self.attach_session(session)
                 self.sessions.prune()
         elif page=='settings':
+            if index==6:
+                self.update_settings(); return
             if index==5:
                 navigator_settings.save_section_modifier('super' if navigator_settings.section_modifier()=='ctrl' else 'ctrl')
                 return
