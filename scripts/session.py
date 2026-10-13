@@ -104,7 +104,7 @@ def main(path):
     finally:
         job.update(status='finished' if code==0 else 'failed',exit_code=code); atomic_json(path,job)
     if job['action'] in ('shell','connect','editor') and code==0: return
-    try: input('\nSession ended. Press Enter to return to the navigator. ')
+    try: input('\nSession ended. ')
     except (EOFError,KeyboardInterrupt): pass
 
 if __name__=='__main__': main(Path(sys.argv[1]))

@@ -91,7 +91,7 @@ class Navigator:
             try: self.screen.addnstr(y,0,text,w-1,attr)
             except curses.error: pass
 
-    def draw(self,title,labels,selected=0,footer='CTRL+←→ SECTION  ←→ DATA PAGE  ↑↓ ITEM  ENTER OPEN  ESC BACK',detail='',refresh=True):
+    def draw(self,title,labels,selected=0,footer='',detail='',refresh=True):
         if refresh: self.native_clock('')
         h,w=self.screen.getmaxyx(); self.screen.erase()
         tabs='   '.join(('[  '+s+'  ]' if s=='⚙️' else '['+s+']') if i==self.section else s for i,s in enumerate(self.sections))
@@ -102,7 +102,12 @@ class Navigator:
             self.put(3+index-offset,label,curses.A_REVERSE if index==selected else 0)
         self.put(h-2,detail or self.message)
         footer=footer.replace('CTRL+←→',navigator_settings.section_modifier().upper()+'+←→')
-        self.put(h-1,footer)
+        if os.environ.get('FALLOUT_EMBEDDED_SOCKET'):
+            context=(self.section,title,footer)
+            if getattr(self,'shortcut_context',None)!=context:
+                from embedded_client import request
+                request('shortcut_context',section=self.section,title=title,context=footer)
+                self.shortcut_context=context
         if refresh: self.screen.refresh()
 
     def native_clock(self,value):
@@ -207,7 +212,7 @@ class Navigator:
         session=self.sessions.launch(action,label,**details)
         self.section=self.sections.index('TERMINAL')
         self.selected['terminal']=len(self.sessions.items) # + terminal row occupies index 0
-        self.message='Ctrl+] returns to the navigator; the session stays running.'
+        self.message=''
         self.attach_session(session)
 
     def attach_session(self,session):
@@ -321,7 +326,7 @@ class Navigator:
         if uri is None: return
         server=file_servers.add_server(name,uri)
         self.data_index=next(i for i,(identity,_) in enumerate(self.data_pages()) if identity==server['id'])
-        self.message='Server saved. Press Enter to connect.'
+        self.message='Server saved.'
 
     def connect_file_server(self,server):
         if not os.environ.get('FALLOUT_EMBEDDED_SOCKET'):
@@ -374,11 +379,11 @@ class Navigator:
             return 'savedkeys','SAVED KEYS',[k['name'] for k in keys] or ['No saved keys'],keys
         if self.sections[self.section]=='TERMINAL':
             self.sessions.prune()
-            return 'terminal','TERMINAL // Ctrl+] detaches a live session',['+ Local terminal']+[s.label+' // '+s.status for s in self.sessions.items],self.sessions.items
+            return 'terminal','TERMINAL',['+ Local terminal']+[s.label+' // '+s.status for s in self.sessions.items],self.sessions.items
         if self.sections[self.section]=='⚙️':
             status='Enabled' if crt_settings.running() and crt_settings.enabled() else 'Disabled'
             animation='Enabled' if crt_settings.running() and crt_settings.animation_enabled() else 'Disabled'
-            return 'settings','⚙ SETTINGS',['CRT overlay: '+status,'CRT scan animation: '+animation,'Volume','Navigator font size: '+str(navigator_settings.font_size())+' pt','Transparent background (Ctrl+Shift+B): '+('Enabled' if navigator_settings.transparent() else 'Disabled'),'Section shortcut: '+navigator_settings.section_modifier().title()+' + Left/Right','Update'],[]
+            return 'settings','⚙ SETTINGS',['CRT overlay: '+status,'CRT scan animation: '+animation,'Volume','Navigator font size: '+str(navigator_settings.font_size())+' pt','Transparent background: '+('Enabled' if navigator_settings.transparent() else 'Disabled'),'Section modifier: '+navigator_settings.section_modifier().title(),'Update'],[]
         if self.apps is None: self.apps=self.applications()
         return 'apps','APPLICATIONS',[a['name'] for a in self.apps] or ['No applications'],self.apps
 
@@ -689,8 +694,7 @@ class Navigator:
                     index=max(0,min(self.selected.get(page,0),len(labels)-1))
                     self.selected[page]=index
                     detail=(self.message or str(items[index][0])) if page=='home' else self.message
-                    footer='CTRL+←→ SECTION  ←→ DATA PAGE  ↑↓ ITEM  ENTER OPEN  CTRL+M MENU  CTRL+N NEW  O OPEN / SHELL  Q EXIT' if page=='home' else 'CTRL+←→ CHANGE SECTION  ↑↓ SELECT ITEM  ENTER OPEN  BACKSPACE BACK  Q EXIT'
-                    redraw=self.draw_clock if page=='clock' else lambda: self.draw(title,labels,index,footer,detail)
+                    redraw=self.draw_clock if page=='clock' else lambda: self.draw(title,labels,index,detail=detail)
                     if self.transition_pending:
                         self.transition_pending=False
                         animate_section(self.screen,redraw)
@@ -724,7 +728,7 @@ class Navigator:
                             self.screen.timeout(-1)
                             try: self.new_entry(items[index][0])
                             finally: self.screen.timeout(300)
-                        else: self.message='Highlight a directory, then press Ctrl+N.'
+                        else: self.message='Select a directory to create an item.'
                     elif key in ('o','O') and page=='home':
                         path,_,directory=items[index]
                         if directory: self.launch('shell','Local: '+path.name,cwd=str(path))

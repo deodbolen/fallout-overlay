@@ -51,6 +51,8 @@ class Host:
         self.sounds=Sounds()
         self.path=path; self.listener=listener; self.records={}; self.current=None
         self.waiter=None; self.closed=False; self.nav_pid=None
+        self.shortcut_context={'section':0,'title':'HOME','context':''}
+        self.shortcut_dialog=None
         self.transparent=navigator_settings.transparent()
         self.window=Gtk.Window(title='ROBCO TERMLINK')
         self.discovery=Discovery(self.window)
@@ -83,7 +85,8 @@ class Host:
         overlay.set_overlay_pass_through(self.background_notice,True)
         self.background_notice_timer=None
         self.static_until=0; self.static_timer=None
-        self.footer=Gtk.Label(label='Ctrl+]  Navigator  |  Ctrl+↑/↓  Sessions  |  Ctrl+Shift+W  Close  |  Ctrl+Shift+C/V  Copy/Paste')
+        self.footer=Gtk.Label()
+        self.footer.set_no_show_all(True)
         self.footer.set_xalign(0); self.footer.set_margin_start(8); self.footer.set_margin_end(8)
         self.footer.set_margin_top(4); self.footer.set_margin_bottom(4)
         self.footer.set_name('session-reminder')
@@ -98,12 +101,12 @@ class Host:
         self.navigator.connect('key-press-event',self.nav_keys)
         self.navigator.connect('child-exited',self.nav_exited)
         self.stack.add_named(self.navigator,'navigator')
-        self.power_button=Gtk.Button(label='⏻ Power [P]')
+        self.power_button=Gtk.Button(label='⏻ Power')
         self.power_button.set_name('home-power')
         self.power_button.set_halign(Gtk.Align.END); self.power_button.set_valign(Gtk.Align.END)
         self.power_button.set_margin_end(16); self.power_button.set_margin_bottom(8)
         self.power_button.set_no_show_all(True)
-        self.power_button.set_tooltip_text('Press P on Home: sleep, log out, restart or shut down')
+        self.power_button.set_tooltip_text('Sleep, log out, restart or shut down')
         self.power_button.connect('clicked',self.open_power_menu)
         overlay.add_overlay(self.power_button)
         self.stack.connect('notify::visible-child-name',lambda *args: self.update_power_button())
@@ -141,6 +144,7 @@ class Host:
         terminal.connect_after('draw',self.draw_static)
         terminal.connect('button-press-event',self.terminal_menu)
         terminal.connect('key-press-event',self.typing_sound)
+        terminal.connect('key-press-event',self.help_shortcut)
         terminal.set_font(Pango.FontDescription(font))
         terminal.set_color_foreground(color('#b6ffa3'))
         terminal.set_color_background(color('rgba(5,10,6,0)'))
@@ -158,7 +162,44 @@ class Host:
         context.paint(); context.restore()
         return False
 
+    def help_shortcut(self,widget,event):
+        modifiers=event.state&Gtk.accelerator_get_default_mod_mask()
+        if modifiers!=Gdk.ModifierType.CONTROL_MASK or Gdk.keyval_to_lower(event.keyval)!=Gdk.KEY_i:
+            return False
+        if self.shortcut_dialog is not None:
+            self.shortcut_dialog.response(Gtk.ResponseType.CLOSE)
+            return True
+        from shortcut_help import text
+        context=self.shortcut_context
+        names=('HOME','DATA','SSH','TERMINAL','APPLICATIONS','SETTINGS')
+        section='SESSION' if self.stack.get_visible_child_name()!='navigator' else names[max(0,min(5,context['section']))]
+        body=text(section,navigator_settings.section_modifier(),
+                  'TERMINAL SESSION' if section=='SESSION' else context['title'],
+                  '' if section=='SESSION' else context['context'])
+        dialog=Gtk.Dialog(title='Keyboard shortcuts',transient_for=self.window,modal=True)
+        self.shortcut_dialog=dialog
+        dialog.add_button('Close',Gtk.ResponseType.CLOSE)
+        dialog.set_default_response(Gtk.ResponseType.CLOSE)
+        dialog.set_default_size(620,520)
+        dialog.connect('key-press-event',self.help_shortcut)
+        scroll=Gtk.ScrolledWindow()
+        scroll.set_policy(Gtk.PolicyType.NEVER,Gtk.PolicyType.AUTOMATIC)
+        label=Gtk.Label(label=body)
+        label.set_xalign(0); label.set_yalign(0); label.set_line_wrap(True)
+        label.set_margin_start(20); label.set_margin_end(20)
+        label.set_margin_top(16); label.set_margin_bottom(16)
+        scroll.add(label)
+        dialog.get_content_area().pack_start(scroll,True,True,0)
+        dialog.show_all()
+        try: dialog.run()
+        finally:
+            self.shortcut_dialog=None
+            dialog.destroy()
+            widget.grab_focus()
+        return True
+
     def background_shortcut(self,widget,event):
+        if self.help_shortcut(widget,event): return True
         modifiers=Gdk.ModifierType.CONTROL_MASK|Gdk.ModifierType.SHIFT_MASK
         if event.state&modifiers==modifiers and Gdk.keyval_to_lower(event.keyval)==Gdk.KEY_b:
             enabled=not navigator_settings.transparent()
@@ -285,14 +326,14 @@ class Host:
     def terminal_menu(self,widget,event):
         if event.button!=3: return False
         menu=Gtk.Menu()
-        copy=Gtk.MenuItem(label='Copy   Ctrl+Shift+C')
+        copy=Gtk.MenuItem(label='Copy')
         copy.set_sensitive(widget.get_has_selection())
         copy.connect('activate',lambda item: widget.copy_clipboard_format(Vte.Format.TEXT))
         menu.append(copy)
-        paste=Gtk.MenuItem(label='Paste   Ctrl+Shift+V')
+        paste=Gtk.MenuItem(label='Paste')
         paste.connect('activate',lambda item: widget.paste_clipboard())
         menu.append(paste)
-        select=Gtk.MenuItem(label='Select all   Ctrl+Shift+A')
+        select=Gtk.MenuItem(label='Select all')
         select.connect('activate',lambda item: widget.select_all())
         menu.append(select)
         menu.show_all(); menu.popup_at_pointer(event)
@@ -379,7 +420,7 @@ class Host:
         record=self.records[sid]
         if self.current is not None and self.current!=sid: self.animate_session_switch()
         self.current=sid; self.stack.set_visible_child_name(sid)
-        self.heading.set_text('TERMINAL // '+record['label']); self.heading.show(); self.footer.show()
+        self.heading.set_text('TERMINAL // '+record['label']); self.heading.show()
         GLib.idle_add(record['terminal'].grab_focus)
 
     def show_navigator(self):
@@ -488,6 +529,9 @@ class Host:
                     try:
                         command=request['command']
                         if command=='launch': reply(self.launch(request['action'],request['label'],request.get('details',{})))
+                        elif command=='shortcut_context':
+                            self.shortcut_context={'section':int(request['section']),'title':str(request.get('title',''))[:160],'context':str(request.get('context',''))[:512]}
+                            reply({})
                         elif command=='browse_network': reply(self.discovery.browse(request.get('uri','network:///'),request.get('refresh',False)))
                         elif command=='mount_server': self.mount_server(request['uri'],reply)
                         elif command=='clock':
