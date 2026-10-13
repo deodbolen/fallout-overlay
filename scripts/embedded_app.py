@@ -110,6 +110,8 @@ class Host:
         env=dict(os.environ,FALLOUT_EMBEDDED_SOCKET=str(path),TERM='xterm-256color')
         self.spawn(self.navigator,[sys.executable,str(ROOT/'scripts/browser.py')],str(Path.home()),env,self.nav_spawned)
         self.window.show_all(); self.show_navigator(); self.sounds.play('load')
+        from external_terminals import watch
+        self.desktop_windows = watch(self)
         threading.Thread(target=self.serve,daemon=True).start()
         GLib.timeout_add(250,self.refresh)
 
