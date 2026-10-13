@@ -64,6 +64,9 @@ def install_panel_bitmaps(directory):
     directory = Path(directory)
     sizes = (16, 22, 24, 32, 48)
     cfg = configparser.ConfigParser()
+    # GTK's icon-theme keys are case-sensitive; ConfigParser otherwise writes
+    # Name/Directories/Size as lowercase and GTK rejects those fields.
+    cfg.optionxform = str
     cfg.read(directory / 'index.theme')
     folders = []
     for size in sizes:
