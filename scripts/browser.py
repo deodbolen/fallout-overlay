@@ -559,6 +559,7 @@ class Navigator:
         env.pop('FALLOUT_SOUND_SOCKET',None)
         subprocess.Popen(['xfce4-terminal','--disable-server','--title=Fallout Update',
                           '--command='+shlex.join(command)],env=env,start_new_session=True)
+        self.hide_for_application()
         self.message='Update window opened.'
 
     def font_settings(self):
