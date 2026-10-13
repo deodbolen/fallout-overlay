@@ -553,13 +553,13 @@ class Navigator:
         elif choice==9: self.open_with(path)
 
     def update_settings(self):
+        self.hide_for_application()
         command=['/usr/bin/python3',str(Path(__file__).with_name('update_app.py'))]
         env=dict(os.environ)
         env.pop('FALLOUT_EMBEDDED_SOCKET',None)
         env.pop('FALLOUT_SOUND_SOCKET',None)
         subprocess.Popen(['xfce4-terminal','--disable-server','--title=Fallout Update',
                           '--command='+shlex.join(command)],env=env,start_new_session=True)
-        self.hide_for_application()
         self.message='Update window opened.'
 
     def font_settings(self):
