@@ -126,6 +126,20 @@ def main():
     terminal_source=CONFIG/'xfce4/xfconf/xfce-perchannel-xml/xfce4-terminal.xml'
     if not terminal_snapshot.exists() and terminal_source.exists(): shutil.copy2(terminal_source,terminal_snapshot)
     shutil.copytree(ROOT/'theme',HOME/'.themes/Fallout-PipBoy',dirs_exist_ok=True)
+    # Include the new icon theme in existing installations' restore manifests.
+    icon_target='.icons/Fallout-PipBoy'
+    manifest=json.loads((BACKUP/'files.json').read_text())
+    if not any(item['path']==icon_target for item in manifest):
+        src=HOME/icon_target
+        if src.exists():
+            dest=BACKUP/'files'/str(len(manifest)); dest.parent.mkdir(parents=True,exist_ok=True)
+            shutil.copytree(src,dest)
+        manifest.append({'path':icon_target,'exists':src.exists()})
+        (BACKUP/'files.json').write_text(json.dumps(manifest))
+    from network_icons import install as install_network_icons
+    previous_icons=query('xsettings','/Net/IconThemeName')
+    install_network_icons(HOME/icon_target,previous_icons.stdout.strip() if previous_icons.returncode==0 else 'Adwaita')
+    setprop('xsettings','/Net/IconThemeName','Fallout-PipBoy')
     # Preserve terminal preferences outside the keys we change.
     term=CONFIG/'xfce4/terminal/terminalrc'; term.parent.mkdir(parents=True,exist_ok=True)
     cfg=configparser.ConfigParser(); cfg.optionxform=str
