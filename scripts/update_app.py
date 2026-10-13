@@ -12,6 +12,19 @@ import time
 ROOT = Path(__file__).resolve().parent.parent
 
 
+def hide_overlay(runtime):
+    # The external terminal deliberately has no FALLOUT_EMBEDDED_SOCKET env.
+    # Locate the same host as F12 and send the GUI launcher's idempotent hide
+    # command. This also works when the navigator still has older code loaded.
+    from embedded_client import request
+    path = runtime / 'embedded.sock'
+    try:
+        request('hide', socket_path=str(path), timeout=5)
+    except (FileNotFoundError, ConnectionRefusedError):
+        # Updating from a regular desktop terminal with no overlay is valid.
+        pass
+
+
 def git(*args):
     return subprocess.run(['git', '-C', str(ROOT), *args], check=True,
                           text=True, capture_output=True).stdout.strip()
@@ -67,6 +80,7 @@ def restart_overlay():
 def main():
     runtime = Path(os.environ.get('XDG_RUNTIME_DIR', str(Path.home() / '.cache'))) / 'fallout-ui'
     runtime.mkdir(parents=True, exist_ok=True)
+    hide_overlay(runtime)
     with (runtime / 'update.lock').open('a') as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)

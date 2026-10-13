@@ -1,8 +1,11 @@
 import os
 from pathlib import Path
 import subprocess
+import json
+import socket
 import sys
 import tempfile
+import threading
 from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
@@ -11,6 +14,43 @@ import update_app
 
 
 class UpdateTests(unittest.TestCase):
+    def test_external_updater_hides_running_host_before_check_even_on_failure(self):
+        # Exercise the actual socket bridge, without the navigator's environment
+        # or a running GTK desktop. The host acknowledges the same command that
+        # opening a GUI application sends.
+        for failed_check in (False, True):
+            with self.subTest(failed_check=failed_check), tempfile.TemporaryDirectory(dir='/tmp') as folder:
+                runtime=Path(folder)/'fallout-ui'
+                runtime.mkdir()
+                commands=[]
+                with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as listener:
+                    listener.bind(str(runtime/'embedded.sock'))
+                    listener.listen(1)
+                    listener.settimeout(3)
+                    def host():
+                        with listener.accept()[0] as connection:
+                            commands.append(json.loads(connection.makefile('rb').readline()))
+                            connection.sendall(b'{}\n')
+                    worker=threading.Thread(target=host,daemon=True)
+                    worker.start()
+                    def check():
+                        self.assertEqual(commands,[{'command':'hide'}])
+                        if failed_check:
+                            raise ValueError('Network unavailable')
+                        return 0
+                    env={key:value for key,value in os.environ.items() if key!='FALLOUT_EMBEDDED_SOCKET'}
+                    env['XDG_RUNTIME_DIR']=folder
+                    try:
+                        with patch.dict(os.environ,env,clear=True), patch('update_app.check_updates',side_effect=check):
+                            if failed_check:
+                                with self.assertRaisesRegex(ValueError,'Network unavailable'):
+                                    update_app.main()
+                            else:
+                                self.assertFalse(update_app.main())
+                    finally:
+                        worker.join(3)
+                    self.assertFalse(worker.is_alive())
+
     def test_check_fetches_upstream_and_reports_new_commits(self):
         with patch('update_app.git',side_effect=['main','','origin/main','origin','','0\t3']) as git:
             self.assertEqual(update_app.check_updates(),3)

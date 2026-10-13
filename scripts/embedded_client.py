@@ -4,9 +4,10 @@ import os
 import socket
 
 
-def request(command,**details):
+def request(command,*,socket_path=None,timeout=None,**details):
     with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as connection:
-        connection.connect(os.environ['FALLOUT_EMBEDDED_SOCKET'])
+        connection.settimeout(timeout)
+        connection.connect(socket_path if socket_path is not None else os.environ['FALLOUT_EMBEDDED_SOCKET'])
         connection.sendall(json.dumps({'command':command,**details}).encode()+b'\n')
         stream=connection.makefile('rb')
         line=stream.readline(65537)
