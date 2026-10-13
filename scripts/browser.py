@@ -52,7 +52,7 @@ class Navigator:
         else: self.sessions=Sessions()
         self.section=0
         self.sections=['HOME','DATA','SSH','TERMINAL','APPLICATIONS','⚙️']
-        self.page='ssh'
+        self.page='hosts'
         self.selected={}
         self.message=''
         self.apps=None
@@ -298,6 +298,13 @@ class Navigator:
         self.sound('select')
         return True
 
+    def switch_ssh_page(self,key):
+        if self.sections[self.section]!='SSH' or key not in (curses.KEY_LEFT,curses.KEY_RIGHT): return False
+        self.page='hosts' if key==curses.KEY_LEFT else 'keys'
+        self.message=''
+        self.sound('select')
+        return True
+
     def data_pages(self):
         if os.environ.get('FALLOUT_EMBEDDED_SOCKET') and time.monotonic()-self.discovery_checked>=2:
             self.discovery_checked=time.monotonic()
@@ -370,13 +377,13 @@ class Navigator:
             return 'home',title,labels,rows
         if self.sections[self.section]=='SSH':
             data=self.catalog.read()
-            if self.page=='ssh': return 'ssh','SSH',['HOST','SSH-KEY'],[]
-            if self.page=='hosts':
+            keys_page=self.page in ('keys','savedkeys')
+            title='SSH // '+('HOSTS   [KEYS]' if keys_page else '[HOSTS]   KEYS')
+            if not keys_page:
                 hosts=sorted(data['hosts'],key=lambda h:h['name'].casefold())
-                return 'hosts','HOST',['+ HOST']+[h['name']+' // '+username(h)+'@'+h['address'] for h in hosts],hosts
-            if self.page=='keys': return 'keys','SSH-KEY',['Generate new key','Saved keys'],[]
+                return 'hosts',title,['+ HOST']+[h['name']+' // '+username(h)+'@'+h['address'] for h in hosts],hosts
             keys=sorted(data['keys'],key=lambda k:k['name'].casefold())
-            return 'savedkeys','SAVED KEYS',[k['name'] for k in keys] or ['No saved keys'],keys
+            return 'keys',title,['+ KEY']+[k['name'] for k in keys],keys
         if self.sections[self.section]=='TERMINAL':
             self.sessions.prune()
             return 'terminal','TERMINAL',['+ Local terminal']+[s.label+' // '+s.status for s in self.sessions.items],self.sessions.items
@@ -644,7 +651,7 @@ class Navigator:
                 if name:
                     generate_path(name)
                     self.launch('generate','Generate '+name,name=name)
-            else: self.page='savedkeys'
+            else: self.key_actions(items[index-1])
         elif page=='savedkeys':
             if items: self.key_actions(items[index])
         elif page=='terminal':
@@ -706,6 +713,7 @@ class Navigator:
                     self.navigation_sound(key)
                     if self.switch_section(key): pass
                     elif self.switch_data_page(key): pass
+                    elif self.switch_ssh_page(key): pass
                     elif key in (curses.KEY_DOWN,'j'): self.selected[page]=min(len(labels)-1,index+1)
                     elif key in (curses.KEY_UP,'k'): self.selected[page]=max(0,index-1)
                     elif key==curses.KEY_NPAGE: self.selected[page]=min(len(labels)-1,index+max(1,self.screen.getmaxyx()[0]-6))
@@ -722,7 +730,6 @@ class Navigator:
                         elif page=='network' and len(self.network_history)>1:
                             self.network_history.pop(); self.selected['network']=0
                         elif page=='savedkeys': self.page='keys'
-                        elif page in ('hosts','keys'): self.page='ssh'
                     elif key=='\x0e' and page=='home':
                         if items[index][2]:
                             self.screen.timeout(-1)

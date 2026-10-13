@@ -14,7 +14,7 @@ def text(section, modifier='ctrl', title='', context=''):
         'DATA': navigation + ['← / →   Change Data page', 'Ctrl+M or M   File menu',
                               'Ctrl+N   New file / directory', 'O   Open file or directory shell',
                               'S   Open a shell here', 'H   Show / hide hidden files'],
-        'SSH': navigation,
+        'SSH': navigation + ['← / →   Switch Hosts / Keys'],
         'TERMINAL': navigation,
         'APPLICATIONS': navigation,
         'SETTINGS': navigation + ['+ / −   Adjust the selected font or volume setting'],
