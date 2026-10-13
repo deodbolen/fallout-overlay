@@ -53,3 +53,38 @@ def install(directory, inherited):
     for stage in range(1, 4):
         for frame in range(1, 12):
             write([f'nm-stage{stage:02d}-connecting{frame:02d}'], ''.join(arcs[:1 + frame % 4]))
+
+
+def install_panel_bitmaps(directory):
+    """Supply exact-size tray images and verify GTK can resolve the theme."""
+    import gi
+    gi.require_version('GdkPixbuf', '2.0')
+    gi.require_version('Gtk', '3.0')
+    from gi.repository import GdkPixbuf, Gtk
+    directory = Path(directory)
+    sizes = (16, 22, 24, 32, 48)
+    cfg = configparser.ConfigParser()
+    cfg.read(directory / 'index.theme')
+    folders = []
+    for size in sizes:
+        folder = f'{size}x{size}/status'
+        folders.append(folder)
+        (directory / folder).mkdir(parents=True, exist_ok=True)
+        for source in (directory / 'scalable/status').glob('*.svg'):
+            if source.stem.endswith('-symbolic'):
+                continue
+            pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(str(source), size, size, True)
+            pixbuf.savev(str(directory / folder / (source.stem + '.png')), 'png', [], [])
+        cfg[folder] = {'Size': str(size), 'Type': 'Fixed', 'Context': 'Status'}
+    cfg['Icon Theme']['Directories'] = ','.join(folders + ['scalable/status'])
+    with (directory / 'index.theme').open('w') as stream:
+        cfg.write(stream)
+    # A cache left by an earlier installation must not hide new files.
+    (directory / 'icon-theme.cache').unlink(missing_ok=True)
+    theme = Gtk.IconTheme.new()
+    theme.prepend_search_path(str(directory.parent))
+    theme.set_custom_theme(directory.name)
+    for name in ('nm-device-wired', 'network-wired', 'nm-signal-100'):
+        info = theme.lookup_icon(name, 22, Gtk.IconLookupFlags.FORCE_SIZE)
+        if info is None or not info.get_filename() or not Path(info.get_filename()).is_relative_to(directory):
+            raise RuntimeError(f'Green panel icon could not be loaded: {name}')

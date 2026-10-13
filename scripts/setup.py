@@ -136,9 +136,14 @@ def main():
             shutil.copytree(src,dest)
         manifest.append({'path':icon_target,'exists':src.exists()})
         (BACKUP/'files.json').write_text(json.dumps(manifest))
-    from network_icons import install as install_network_icons
+    from network_icons import install as install_network_icons, install_panel_bitmaps
     previous_icons=query('xsettings','/Net/IconThemeName')
     install_network_icons(HOME/icon_target,previous_icons.stdout.strip() if previous_icons.returncode==0 else 'Adwaita')
+    install_panel_bitmaps(HOME/icon_target)
+    # NMApplet caches pixbufs until GTK emits an icon-theme change. A repeat
+    # install setting the same value does not trigger that notification.
+    setprop('xsettings','/Net/IconThemeName','Adwaita')
+    __import__('time').sleep(.3)
     setprop('xsettings','/Net/IconThemeName','Fallout-PipBoy')
     # Preserve terminal preferences outside the keys we change.
     term=CONFIG/'xfce4/terminal/terminalrc'; term.parent.mkdir(parents=True,exist_ok=True)
