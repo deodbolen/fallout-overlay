@@ -2,6 +2,9 @@
 # Run as the desktop user; elevate only apt, never desktop configuration.
 set -eu
 packages='git python3 python3-gi python3-cairo python3-gi-cairo gir1.2-gtk-3.0 gir1.2-vte-2.91 gir1.2-gstreamer-1.0 gstreamer1.0-plugins-base gstreamer1.0-plugins-good xfce4-panel xfconf xfwm4 xfdesktop4 xfce4-terminal xfce4-genmon-plugin fonts-dejavu-core nano openssh-client libglib2.0-bin librsvg2-common gvfs-backends gvfs-fuse avahi-daemon xdg-utils bash'
+if command -v lightdm-gtk-greeter >/dev/null 2>&1; then
+    packages="$packages gcc pkg-config liblightdm-gobject-1-dev libgstreamer1.0-dev gstreamer1.0-alsa"
+fi
 if ! command -v apt-get >/dev/null 2>&1 || ! command -v dpkg-query >/dev/null 2>&1; then
     echo 'This installer requires Debian or an apt-based Debian derivative.' >&2
     exit 1

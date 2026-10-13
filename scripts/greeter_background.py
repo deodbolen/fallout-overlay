@@ -5,6 +5,8 @@ import os
 from pathlib import Path
 import shutil
 import socket
+import shlex
+import subprocess
 import sys
 import xml.etree.ElementTree as ET
 from xml.sax.saxutils import escape
@@ -15,6 +17,60 @@ BACKGROUND = Path('/usr/share/backgrounds/fallout-ui-login.svg')
 ROOT = Path(__file__).resolve().parent.parent
 LOGIN_THEME = Path('/usr/share/themes/Fallout-Login')
 LOGO = Path('/usr/share/pixmaps/fallout-vault-tec.png')
+SOUND_DIR = Path('/usr/share/fallout-ui/login-sounds')
+SOUND_LIBRARY = Path('/usr/lib/fallout-ui/greeter-sounds.so')
+SOUND_LAUNCHER = Path('/usr/lib/fallout-ui/greeter')
+SOUND_DESKTOP = Path('/usr/share/xgreeters/fallout-gtk-greeter.desktop')
+SOUND_CONFIG = Path('/etc/lightdm/lightdm.conf.d/90-fallout-greeter.conf')
+
+
+def install_login_sounds():
+    flags = shlex.split(subprocess.check_output(
+        ['pkg-config', '--cflags', '--libs', 'liblightdm-gobject-1', 'gstreamer-1.0'],
+        text=True))
+    SOUND_LIBRARY.parent.mkdir(parents=True, exist_ok=True)
+    temporary = SOUND_LIBRARY.with_suffix('.so.tmp')
+    try:
+        subprocess.run(['cc', '-shared', '-fPIC', '-O2', '-Wall', '-Wextra',
+                        str(ROOT / 'scripts/greeter_sounds.c'), '-o', str(temporary),
+                        *flags, '-ldl'], check=True)
+        temporary.chmod(0o644)
+        temporary.replace(SOUND_LIBRARY)
+    finally:
+        temporary.unlink(missing_ok=True)
+    SOUND_DIR.mkdir(parents=True, exist_ok=True)
+    for event in ('good', 'bad'):
+        target = SOUND_DIR / f'{event}.wav'
+        shutil.copyfile(ROOT / f'fallout-sounds/password/ui_hacking_pass{event}.wav', target)
+        target.chmod(0o644)
+    # Use a separate greeter entry; leave the distribution's executable and
+    # desktop entry intact. Remove preload from the environment before exec so
+    # greeter child processes do not inherit the authentication adapter.
+    binary = shutil.which('lightdm-gtk-greeter')
+    SOUND_LAUNCHER.write_text('#!/bin/sh\nexec env LD_PRELOAD=' +
+                             shlex.quote(str(SOUND_LIBRARY)) + ' ' +
+                             shlex.quote(binary) + ' "$@"\n')
+    SOUND_LAUNCHER.chmod(0o755)
+    SOUND_DESKTOP.parent.mkdir(parents=True, exist_ok=True)
+    SOUND_DESKTOP.write_text('[Desktop Entry]\nName=Fallout GTK Greeter\n'
+                             f'Exec={SOUND_LAUNCHER}\nType=Application\n')
+    SOUND_DESKTOP.chmod(0o644)
+    SOUND_CONFIG.parent.mkdir(parents=True, exist_ok=True)
+    if not (BACKUP / 'sound-config-saved').exists():
+        if SOUND_CONFIG.exists():
+            shutil.copy2(SOUND_CONFIG, BACKUP / 'original-sound.conf')
+        (BACKUP / 'sound-config-saved').touch()
+    SOUND_CONFIG.write_text('[Seat:*]\ngreeter-session=fallout-gtk-greeter\n')
+    SOUND_CONFIG.chmod(0o644)
+
+
+def restore_login_sounds():
+    if (BACKUP / 'sound-config-saved').exists():
+        if (BACKUP / 'original-sound.conf').exists():
+            shutil.copy2(BACKUP / 'original-sound.conf', SOUND_CONFIG)
+        else:
+            SOUND_CONFIG.unlink(missing_ok=True)
+        SOUND_DESKTOP.unlink(missing_ok=True)
 
 
 def install_login_theme():
@@ -119,6 +175,7 @@ def main():
     if os.geteuid() != 0:
         raise SystemExit('The login-screen configuration requires sudo.')
     if sys.argv[1] == 'restore':
+        restore_login_sounds()
         if not (BACKUP / 'saved').exists():
             return
         if (BACKUP / 'original.conf').exists():
@@ -140,6 +197,7 @@ def main():
     if not cfg.has_section('greeter'):
         cfg.add_section('greeter')
     install_login_theme()
+    install_login_sounds()
     cfg.set('greeter', 'theme-name', 'Fallout-Login')
     cfg.set('greeter', 'default-user-image', str(LOGO))
     cfg.set('greeter', 'hide-user-image', 'false')
@@ -157,7 +215,7 @@ def main():
         cfg.write(stream)
     temporary.chmod(0o644)
     temporary.replace(CONFIG)
-    print('Black login background with green RobCo header installed; applies at the next login screen.')
+    print('Login theme and success/failure sounds installed; applies at the next login screen.')
 
 
 if __name__ == '__main__':

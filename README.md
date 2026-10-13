@@ -29,7 +29,7 @@ The first backup is preserved at `~/.local/state/fallout-ui/original`; reinstall
 
 The navigator background is transparent by default, showing your desktop behind the green text. Toggle **Settings → Transparent background** to switch to the opaque Pip-Boy background; the preference saves immediately. Installation enables XFCE compositing for transparency.
 
-The LightDM GTK login screen uses a solid black background after installation. Its original configuration is backed up under `/var/lib/fallout-ui/greeter-background` and restored by `restore.sh`.
+The LightDM GTK login screen uses a solid black background after installation and plays the same success and failure login sounds as the app. Cancel remains silent. The installer builds a small audio adapter on Debian and copies the two WAV files into a system-readable directory, so the login screen does not depend on files in your home directory. Its original configuration is backed up under `/var/lib/fallout-ui/greeter-background` and restored by `restore.sh`.
 
 In Settings, select **Section shortcut** and press Enter to toggle between **Ctrl + Left/Right** (default) and **Super + Left/Right**. The choice saves and applies immediately in the embedded navigator.
 
