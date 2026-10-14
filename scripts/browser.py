@@ -15,6 +15,7 @@ from terminal_sessions import Sessions
 from path_completion import directory_matches, complete_directory
 import crt_settings
 import sound_settings
+import system_audio
 import navigator_settings
 import file_servers
 import tool_belt
@@ -414,7 +415,7 @@ class Navigator:
                 [('CRT overlay: '+status,0),('CRT scan animation: '+animation,1),
                  ('Navigator font size: '+str(navigator_settings.font_size())+' pt',3),
                  ('Transparent background: '+('Enabled' if navigator_settings.transparent() else 'Disabled'),4)],
-                [('Volume',2)],
+                [('System volume',7),('Overlay sound volume',2)],
                 [('Section modifier: '+navigator_settings.section_modifier().title(),5)],
                 [('Update',6)],
             )
@@ -631,6 +632,31 @@ class Navigator:
                         self.message='Navigator font size saved.'
                     except (ValueError,TypeError): self.message='Enter a whole number from 8 to 32.'
 
+    def system_volume_settings(self):
+        index=0
+        while True:
+            volume,muted=system_audio.status()
+            self.draw('SYSTEM VOLUME',['Output volume: '+str(volume)+'%',
+                       'Muted: '+('Yes' if muted else 'No'),'Back'],index,
+                       footer='↑↓ SELECT  +/- ADJUST  ENTER SET / TOGGLE  ESC BACK',
+                       detail=self.message or 'Controls the default desktop audio output.')
+            key=self.menu_key()
+            if key==curses.KEY_UP: index=max(0,index-1)
+            elif key==curses.KEY_DOWN: index=min(2,index+1)
+            elif key in ('\x1b',curses.KEY_BACKSPACE,'\x7f'): return
+            elif key in ('+','=','-') and index==0:
+                system_audio.set_volume(max(0,min(100,volume+(5 if key in ('+','=') else -5))))
+            elif key in ENTER:
+                if index==2: return
+                if index==1: system_audio.toggle_mute()
+                else:
+                    value=self.text('SYSTEM VOLUME (0–100%)',str(volume))
+                    if value is not None:
+                        try:
+                            system_audio.set_volume(value)
+                            self.message='System volume changed.'
+                        except (ValueError,TypeError) as error: self.message=str(error)
+
     def volume_settings(self):
         index=0
         fields=['effects_volume','fan_volume']
@@ -703,6 +729,8 @@ class Navigator:
                 self.sessions.prune()
         elif page.startswith('settings_'):
             index=items[index]
+            if index==7:
+                self.system_volume_settings(); return
             if index==6:
                 self.update_settings(); return
             if index==5:

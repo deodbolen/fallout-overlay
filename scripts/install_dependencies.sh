@@ -2,7 +2,7 @@
 # Run as the desktop user; elevate only apt, never desktop configuration.
 set -eu
 packages='git python3 python3-gi python3-cairo python3-gi-cairo gir1.2-gtk-3.0 gir1.2-vte-2.91 gir1.2-gstreamer-1.0 gstreamer1.0-plugins-base gstreamer1.0-plugins-good xfce4-panel xfconf xfwm4 xfdesktop4 xfce4-terminal xfce4-genmon-plugin fonts-dejavu-core nano openssh-client libglib2.0-bin librsvg2-common gvfs-backends gvfs-fuse avahi-daemon xdg-utils bash'
-packages="$packages gir1.2-wnck-3.0"
+packages="$packages gir1.2-wnck-3.0 pulseaudio-utils"
 if [ "$(dpkg-query -W -f='${Status}' lightdm-gtk-greeter 2>/dev/null || true)" = 'install ok installed' ]; then
     packages="$packages gcc pkg-config liblightdm-gobject-dev libgstreamer1.0-dev gstreamer1.0-alsa"
 fi
