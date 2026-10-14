@@ -54,6 +54,7 @@ class Navigator:
         self.section=0
         self.sections=['HOME','DATA','SSH','TERMINAL','INV','⚙️']
         self.inv_index=0
+        self.settings_index=0
         self.page='hosts'
         self.selected={}
         self.message=''
@@ -314,6 +315,13 @@ class Navigator:
         self.sound('select')
         return True
 
+    def switch_settings_page(self,key):
+        if self.sections[self.section]!='⚙️' or key not in (curses.KEY_LEFT,curses.KEY_RIGHT): return False
+        self.settings_index=max(0,min(3,self.settings_index+(1 if key==curses.KEY_RIGHT else -1)))
+        self.message=''
+        self.sound('select')
+        return True
+
     def data_pages(self):
         if os.environ.get('FALLOUT_EMBEDDED_SOCKET') and time.monotonic()-self.discovery_checked>=2:
             self.discovery_checked=time.monotonic()
@@ -399,7 +407,18 @@ class Navigator:
         if self.sections[self.section]=='⚙️':
             status='Enabled' if crt_settings.running() and crt_settings.enabled() else 'Disabled'
             animation='Enabled' if crt_settings.running() and crt_settings.animation_enabled() else 'Disabled'
-            return 'settings','⚙ SETTINGS',['CRT overlay: '+status,'CRT scan animation: '+animation,'Volume','Navigator font size: '+str(navigator_settings.font_size())+' pt','Transparent background: '+('Enabled' if navigator_settings.transparent() else 'Disabled'),'Section modifier: '+navigator_settings.section_modifier().title(),'Update'],[]
+            tabs=('DISPLAY','AUDIO','CONTROLS','SYSTEM')
+            title='SETTINGS // '+'   '.join('['+name+']' if i==self.settings_index else name for i,name in enumerate(tabs))
+            groups=(
+                [('CRT overlay: '+status,0),('CRT scan animation: '+animation,1),
+                 ('Navigator font size: '+str(navigator_settings.font_size())+' pt',3),
+                 ('Transparent background: '+('Enabled' if navigator_settings.transparent() else 'Disabled'),4)],
+                [('Volume',2)],
+                [('Section modifier: '+navigator_settings.section_modifier().title(),5)],
+                [('Update',6)],
+            )
+            entries=groups[self.settings_index]
+            return 'settings_'+tabs[self.settings_index].lower(),title,[label for label,_ in entries],[action for _,action in entries]
         title='INV // '+('[TOOL BELT]   APPLICATIONS' if self.inv_index==0 else 'TOOL BELT   [APPLICATIONS]')
         if self.apps is None: self.apps=self.applications()
         if self.inv_index==0:
@@ -681,7 +700,8 @@ class Navigator:
                 session=items[index-1]
                 if session.status!='closed': self.attach_session(session)
                 self.sessions.prune()
-        elif page=='settings':
+        elif page.startswith('settings_'):
+            index=items[index]
             if index==6:
                 self.update_settings(); return
             if index==5:
@@ -736,6 +756,7 @@ class Navigator:
                     elif self.switch_data_page(key): pass
                     elif self.switch_ssh_page(key): pass
                     elif self.switch_inventory_page(key): pass
+                    elif self.switch_settings_page(key): pass
                     elif key in (curses.KEY_DOWN,'j'): self.selected[page]=min(len(labels)-1,index+1)
                     elif key in (curses.KEY_UP,'k'): self.selected[page]=max(0,index-1)
                     elif key==curses.KEY_NPAGE: self.selected[page]=min(len(labels)-1,index+max(1,self.screen.getmaxyx()[0]-6))
