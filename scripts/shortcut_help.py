@@ -16,7 +16,7 @@ def text(section, modifier='ctrl', title='', context=''):
                               'S   Open a shell here', 'H   Show / hide hidden files'],
         'SSH': navigation + ['← / →   Switch Hosts / Keys'],
         'TERMINAL': navigation,
-        'APPLICATIONS': navigation,
+        'INV': navigation + ['← / →   Switch Tool Belt / Applications'],
         'SETTINGS': navigation + ['+ / −   Adjust the selected font or volume setting'],
         'SESSION': ['Ctrl+]   Return to navigator', 'Ctrl+↑ / ↓   Switch sessions',
                     'Ctrl+Shift+W   Close session', 'Ctrl+Shift+C / V   Copy / paste',

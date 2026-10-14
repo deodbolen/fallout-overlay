@@ -171,7 +171,7 @@ class Host:
             return True
         from shortcut_help import text
         context=self.shortcut_context
-        names=('HOME','DATA','SSH','TERMINAL','APPLICATIONS','SETTINGS')
+        names=('HOME','DATA','SSH','TERMINAL','INV','SETTINGS')
         section='SESSION' if self.stack.get_visible_child_name()!='navigator' else names[max(0,min(5,context['section']))]
         body=text(section,navigator_settings.section_modifier(),
                   'TERMINAL SESSION' if section=='SESSION' else context['title'],
