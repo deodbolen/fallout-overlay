@@ -16,6 +16,7 @@ import crt_settings
 import sound_settings
 import navigator_settings
 import file_servers
+import tool_belt
 import time
 from network_discovery import discovered_servers
 from urllib.parse import urlsplit
@@ -400,10 +401,19 @@ class Navigator:
             animation='Enabled' if crt_settings.running() and crt_settings.animation_enabled() else 'Disabled'
             return 'settings','⚙ SETTINGS',['CRT overlay: '+status,'CRT scan animation: '+animation,'Volume','Navigator font size: '+str(navigator_settings.font_size())+' pt','Transparent background: '+('Enabled' if navigator_settings.transparent() else 'Disabled'),'Section modifier: '+navigator_settings.section_modifier().title(),'Update'],[]
         title='INV // '+('[TOOL BELT]   APPLICATIONS' if self.inv_index==0 else 'TOOL BELT   [APPLICATIONS]')
-        if self.inv_index==0:
-            return 'toolbelt',title,['Tool belt is empty'],[]
         if self.apps is None: self.apps=self.applications()
+        if self.inv_index==0:
+            favorites=tool_belt.applications(self.apps)
+            return 'toolbelt',title,[app['name'] for app in favorites] or ['Tool belt is empty'],favorites
         return 'apps',title,[a['name'] for a in self.apps] or ['No applications'],self.apps
+
+    def application_actions(self,app):
+        saved=tool_belt.contains(app)
+        choice=self.menu(app['name'],['Launch','Remove from Tool Belt' if saved else 'Add to Tool Belt','Cancel'])
+        if choice==0: self.activate('apps',0,[app])
+        elif choice==1:
+            tool_belt.set_favorite(app,not saved)
+            self.message=app['name']+(' removed from Tool Belt.' if saved else ' added to Tool Belt.')
 
     def open_document(self,path):
         path=Path(path)
@@ -691,7 +701,7 @@ class Navigator:
                 toggle=crt_settings.set_enabled if index==0 else crt_settings.set_animation
                 toggle(choice==0)
                 self.message=label+' '+('enabled.' if choice==0 else 'disabled.')
-        elif page=='apps' and items:
+        elif page in ('apps','toolbelt') and items:
             app=items[index]
             if app['terminal']:
                 args=[]
@@ -755,6 +765,10 @@ class Navigator:
                     elif key in ('m','M','\x0f') and page=='home' and not items[index][2]:
                         self.screen.timeout(-1)
                         try: self.file_actions(items[index][0])
+                        finally: self.screen.timeout(300)
+                    elif key in ('m','M','\x0f') and page in ('apps','toolbelt') and items:
+                        self.screen.timeout(-1)
+                        try: self.application_actions(items[index])
                         finally: self.screen.timeout(300)
                     elif key in ('h','H') and page=='home': self.tree.hidden=not self.tree.hidden
                     elif key in ('s','S') and page=='home':
