@@ -8,6 +8,7 @@ from pathlib import Path
 import subprocess
 
 from navigator_tree import Tree
+from navigator_input import read_key
 
 from ssh_manager import Catalog, username, generate_path, remote_directory, scp_args
 from terminal_sessions import Sessions
@@ -82,7 +83,7 @@ class Navigator:
         return True
 
     def menu_key(self):
-        key=self.screen.get_wch()
+        key=read_key(self.screen)
         self.navigation_sound(key)
         if self.switch_section(key): raise SectionChanged()
         return key
@@ -167,7 +168,7 @@ class Navigator:
                     if h>3 and w>1: self.screen.move(3,min(len(value),w-2)); self.screen.refresh()
                 else:
                     self.draw(label,[value],footer='TYPE VALUE  ENTER ACCEPT  ESC CANCEL')
-                key=self.screen.get_wch()
+                key=read_key(self.screen)
                 if key in ENTER: return value.strip()
                 if key=='\x1b': return None
                 if directory_base is not None and key in (curses.KEY_UP,curses.KEY_DOWN,curses.KEY_BTAB):
@@ -748,7 +749,7 @@ class Navigator:
                         animate_section(self.screen,redraw)
                     else:
                         redraw()
-                    try: key=self.screen.get_wch()
+                    try: key=read_key(self.screen)
                     except curses.error: continue
                     self.message=''
                     self.navigation_sound(key)
