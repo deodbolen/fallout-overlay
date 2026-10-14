@@ -319,7 +319,7 @@ class Navigator:
 
     def switch_settings_page(self,key):
         if self.sections[self.section]!='⚙️' or key not in (curses.KEY_LEFT,curses.KEY_RIGHT): return False
-        self.settings_index=max(0,min(3,self.settings_index+(1 if key==curses.KEY_RIGHT else -1)))
+        self.settings_index=max(0,min(4,self.settings_index+(1 if key==curses.KEY_RIGHT else -1)))
         self.message=''
         self.sound('select')
         return True
@@ -409,7 +409,7 @@ class Navigator:
         if self.sections[self.section]=='⚙️':
             status='Enabled' if crt_settings.running() and crt_settings.enabled() else 'Disabled'
             animation='Enabled' if crt_settings.running() and crt_settings.animation_enabled() else 'Disabled'
-            tabs=('DISPLAY','AUDIO','CONTROLS','SYSTEM')
+            tabs=('DISPLAY','AUDIO','CONTROLS','NETWORK','SYSTEM')
             title='SETTINGS // '+'   '.join('['+name+']' if i==self.settings_index else name for i,name in enumerate(tabs))
             groups=(
                 [('CRT overlay: '+status,0),('CRT scan animation: '+animation,1),
@@ -417,6 +417,7 @@ class Navigator:
                  ('Transparent background: '+('Enabled' if navigator_settings.transparent() else 'Disabled'),4)],
                 [('System volume',7),('Overlay sound volume',2)],
                 [('Section modifier: '+navigator_settings.section_modifier().title(),5)],
+                [('Configure network connections',8)],
                 [('Update',6)],
             )
             entries=groups[self.settings_index]
@@ -632,6 +633,14 @@ class Navigator:
                         self.message='Navigator font size saved.'
                     except (ValueError,TypeError): self.message='Enter a whole number from 8 to 32.'
 
+    def network_settings(self):
+        executable=shutil.which('nm-connection-editor')
+        if not executable:
+            raise ValueError('Network configuration requires nm-connection-editor. Run the installer.')
+        subprocess.Popen([executable],start_new_session=True)
+        self.hide_for_application()
+        self.message='Network connection editor opened.'
+
     def system_volume_settings(self):
         index=0
         while True:
@@ -729,6 +738,8 @@ class Navigator:
                 self.sessions.prune()
         elif page.startswith('settings_'):
             index=items[index]
+            if index==8:
+                self.network_settings(); return
             if index==7:
                 self.system_volume_settings(); return
             if index==6:

@@ -18,7 +18,7 @@ def text(section, modifier='ctrl', title='', context=''):
         'TERMINAL': navigation,
         'INV': navigation + ['← / →   Switch Tool Belt / Applications',
                              'Ctrl+M or M   Launch / add / remove a Tool Belt favorite'],
-        'SETTINGS': navigation + ['← / →   Switch Display / Audio / Controls / System',
+        'SETTINGS': navigation + ['← / →   Switch Display / Audio / Controls / Network / System',
                                   '+ / −   Adjust the selected font or volume setting'],
         'SESSION': ['Ctrl+]   Return to navigator', 'Ctrl+↑ / ↓   Switch sessions',
                     'Ctrl+Shift+W   Close session', 'Ctrl+Shift+C / V   Copy / paste',
