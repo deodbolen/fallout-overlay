@@ -422,6 +422,7 @@ class Navigator:
             title='SETTINGS // '+'   '.join('['+name+']' if i==self.settings_index else name for i,name in enumerate(tabs))
             groups=(
                 [('CRT overlay: '+status,0),('CRT scan animation: '+animation,1),
+                 ('CRT effects and fan always on: '+('On' if crt_settings.always_on() else 'Off'),9),
                  ('Navigator font size: '+str(navigator_settings.font_size())+' pt',3),
                  ('Transparent background: '+('Enabled' if navigator_settings.transparent() else 'Disabled'),4)],
                 [('System volume',7),('Overlay sound volume',2)],
@@ -747,6 +748,8 @@ class Navigator:
                 self.sessions.prune()
         elif page.startswith('settings_'):
             index=items[index]
+            if index==9:
+                crt_settings.set_always_on(not crt_settings.always_on()); return
             if index==8:
                 self.network_settings(); return
             if index==7:

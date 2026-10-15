@@ -30,6 +30,7 @@ from gi.repository import Gtk,Gdk,GLib,Vte,Pango,PangoCairo,GdkPixbuf,Gio
 from ssh_manager import atomic_json,state_dir
 from sounds import Sounds
 import navigator_settings
+import crt_settings
 from network_discovery import Discovery
 
 NAV_FONT='DejaVu Sans Mono 16'
@@ -55,6 +56,8 @@ class Host:
         self.shortcut_dialog=None
         self.transparent=navigator_settings.transparent()
         self.window=Gtk.Window(title='ROBCO TERMLINK')
+        self.window.connect('map',lambda *args: crt_settings.set_host_visible(True))
+        self.window.connect('unmap',lambda *args: crt_settings.set_host_visible(False))
         self.discovery=Discovery(self.window)
         visual=self.window.get_screen().get_rgba_visual()
         if visual: self.window.set_visual(visual)

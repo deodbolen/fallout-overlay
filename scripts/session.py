@@ -47,7 +47,14 @@ def push(host,key,directory):
 
 
 def connect(host,key):
-    if not key: return interactive_ssh(ssh_args(host,password_only=True))[0]
+    if not key:
+        code,errors=interactive_ssh(ssh_args(host,password_only=True))
+        if code==255 and 'Permission denied (publickey)' in errors:
+            print('\nThis server only accepts SSH keys for this account. Select an authorized key, '
+                  'or ask the server administrator to allow password login. Check the username as well.')
+        elif code==255:
+            print('\nSSH could not connect. Check the address, username, network, and authentication messages above.')
+        return code
     code,errors=interactive_ssh(ssh_args(host,key,key_only=True))
     if code==255 and 'Permission denied' in errors:
         choice=input('\nKey authentication failed. Push this public key? [y/N] ').strip().lower()

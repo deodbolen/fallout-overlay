@@ -102,23 +102,43 @@ def main():
     windows=[]
     static=crt_settings.enabled()
     animation=crt_settings.animation_enabled() or '--verify-animation' in sys.argv
+    verifying='--verify' in sys.argv or '--verify-animation' in sys.argv
+    def visible(): return verifying or crt_settings.effects_visible()
     def rebuild(*args):
         for window in windows: window.destroy()
         windows.clear()
         for i in range(display.get_n_monitors()):
-            window=Overlay(display.get_monitor(i).get_geometry(),static,animation); window.show_all(); windows.append(window)
+            window=Overlay(display.get_monitor(i).get_geometry(),static,animation)
+            if visible(): window.show_all()
+            windows.append(window)
     rebuild()
-    sounds=Sounds(); sounds.play('fan',loop=True)
+    sounds=Sounds()
+    fan_active=False
+    def sync_visibility():
+        nonlocal fan_active
+        shown=visible()
+        if shown!=fan_active:
+            if shown: sounds.play('fan',loop=True)
+            else: sounds.stop('fan')
+            fan_active=shown
+        for window in windows:
+            if shown and not window.get_visible(): window.show_all()
+            elif not shown and window.get_visible(): window.hide()
+        return True
+    sync_visibility()
+    GLib.timeout_add(100,sync_visibility)
     GLib.timeout_add(250,sounds.refresh)
     screen.connect('monitors-changed',rebuild)
     if animation:
         def animate():
-            for window in windows: window.queue_draw()
+            for window in windows:
+                if window.get_visible(): window.queue_draw()
             return True
         GLib.timeout_add(33,animate)
     def raise_overlays():
+        sync_visibility()
         for window in windows:
-            if window.get_window():
+            if window.get_visible() and window.get_window():
                 window.set_pass_through()
                 window.get_window().raise_()
         return True

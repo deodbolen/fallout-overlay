@@ -10,6 +10,24 @@ SCRIPT=Path(__file__).with_name('crt_overlay.py').resolve()
 
 def runtime_dir(): return Path(os.environ.get('XDG_RUNTIME_DIR',str(Path.home()/'.cache')))/'fallout-ui'
 
+
+def set_host_visible(visible):
+    atomic_json(runtime_dir()/'overlay-visibility.json',{'pid':os.getpid(),'visible':bool(visible)})
+
+
+def host_visible():
+    try:
+        state=json.loads((runtime_dir()/'overlay-visibility.json').read_text())
+        if not isinstance(state,dict): return False
+        if state.get('visible') is not True: return False
+        pid=int(state['pid'])
+        if pid<=0: return False
+        # Do not leave effects on the desktop after a crash or PID reuse.
+        command=Path(f'/proc/{pid}/cmdline').read_bytes().split(b'\0')
+        return str(Path(__file__).with_name('embedded_app.py').resolve()).encode() in command
+    except (OSError,ValueError,KeyError,TypeError):
+        return False
+
 def running():
     try:
         pid=int((runtime_dir()/'crt.pid').read_text())
@@ -23,6 +41,15 @@ def preferences():
 def enabled(): return bool(preferences().get('crt_overlay',False))
 
 def animation_enabled(): return bool(preferences().get('crt_animation',False))
+
+def always_on(): return preferences().get('crt_always_on',False) is True
+
+def set_always_on(on):
+    data=preferences()
+    data['crt_always_on']=bool(on)
+    atomic_json(config_dir()/'settings.json',data)
+
+def effects_visible(): return always_on() or host_visible()
 
 def write_autostart(on):
     file=Path(os.environ.get('XDG_CONFIG_HOME',str(Path.home()/'.config')))/'autostart/fallout-crt.desktop'

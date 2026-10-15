@@ -97,7 +97,8 @@ def ssh_args(host,key=None,password_only=False,key_only=False):
         path=Path(key['path']).expanduser()
         if not path.is_file(): raise ValueError('Private key is missing: '+str(path))
         args+=['-i',str(path),'-o','IdentitiesOnly=yes']
-    if password_only: args+=['-o','PubkeyAuthentication=no','-o','PreferredAuthentications=password,keyboard-interactive']
+    if password_only: args+=['-o','PubkeyAuthentication=no','-o','PreferredAuthentications=password,keyboard-interactive',
+                            '-o','PasswordAuthentication=yes','-o','KbdInteractiveAuthentication=yes','-o','BatchMode=no']
     if key_only: args+=['-o','PreferredAuthentications=publickey','-o','PasswordAuthentication=no','-o','KbdInteractiveAuthentication=no']
     return args+[target(host)]
 
