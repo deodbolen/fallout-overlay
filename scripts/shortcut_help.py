@@ -12,6 +12,7 @@ def text(section, modifier='ctrl', title='', context=''):
         'HOME': ['P   Open the power menu', 'Tab   Focus the power button',
                  'Space / Enter   Activate the focused button'],
         'DATA': navigation + ['← / →   Change Data page', 'Ctrl+M or M   File menu',
+                              'Enter in Trash   Restore / permanently delete; Empty Trash clears all items',
                               'Ctrl+N   New file / directory', 'O   Open file or directory shell',
                               'S   Open a shell here', 'H   Show / hide hidden files'],
         'SSH': navigation + ['← / →   Switch Hosts / Keys'],

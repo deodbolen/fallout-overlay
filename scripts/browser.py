@@ -19,6 +19,7 @@ import system_audio
 import navigator_settings
 import file_servers
 import tool_belt
+import trash_store
 import time
 from network_discovery import discovered_servers
 from urllib.parse import urlsplit
@@ -342,7 +343,7 @@ class Navigator:
                 self.discovered=discovered_servers(result.get('items',[]))
             except (OSError,ValueError):
                 self.discovered=[]
-        pages=[('root','ROOT'),('home','USERSPACE')]+[(server['id'],server['name']) for server in file_servers.servers()]
+        pages=[('root','ROOT'),('home','USERSPACE'),('trash','TRASH')]+[(server['id'],server['name']) for server in file_servers.servers()]
         if self.discovered: pages.append(('network','NETWORK'))
         pages.append(('add','+ Server'))
         previous=self.previous_data_pages
@@ -383,6 +384,9 @@ class Navigator:
             pages=self.data_pages()
             identity,label=pages[self.data_index]
             title='DATA // '+'   '.join('['+name+']' if i==self.data_index else name for i,(_,name) in enumerate(pages))
+            if identity=='trash':
+                entries=trash_store.entries()
+                return 'trash',title,['Empty Trash']+[item['name']+('/' if item['directory'] else '') for item in entries],entries
             if identity=='network':
                 if not os.environ.get('FALLOUT_EMBEDDED_SOCKET'):
                     return 'network',title,['Network discovery requires the embedded navigator'],[]
@@ -701,6 +705,23 @@ class Navigator:
                     except (ValueError,TypeError): self.message='Enter a number from 0 to 100.'
 
     def activate(self,page,index,items):
+        if page=='trash':
+            if index==0:
+                if not items:
+                    self.message='Trash is empty.'; return
+                if self.menu('EMPTY TRASH',['Cancel','Empty Trash'],detail='Permanently delete all '+str(len(items))+' items?')==1:
+                    trash_store.empty(items)
+                    self.message='Trash emptied.'
+            else:
+                item=items[index-1]
+                choice=self.menu(item['name'],['Restore','Permanently delete','Cancel'],detail=item['original'])
+                if choice==0:
+                    trash_store.restore(item)
+                    self.message='Restored '+item['name']+'.'
+                elif choice==1 and self.menu('PERMANENTLY DELETE',['Cancel','Permanently delete'],detail=item['name'])==1:
+                    trash_store.delete(item)
+                    self.message='Permanently deleted '+item['name']+'.'
+            return
         if page=='network':
             if not os.environ.get('FALLOUT_EMBEDDED_SOCKET'): return
             from embedded_client import request
