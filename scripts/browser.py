@@ -342,7 +342,7 @@ class Navigator:
                 self.discovered=discovered_servers(result.get('items',[]))
             except (OSError,ValueError):
                 self.discovered=[]
-        pages=[('root','ROOT'),('home','HOME')]+[(server['id'],server['name']) for server in file_servers.servers()]
+        pages=[('root','ROOT'),('home','USERSPACE')]+[(server['id'],server['name']) for server in file_servers.servers()]
         if self.discovered: pages.append(('network','NETWORK'))
         pages.append(('add','+ Server'))
         previous=self.previous_data_pages
@@ -401,7 +401,7 @@ class Navigator:
             labels=[]
             for path,depth,directory in rows:
                 marker=('[-]' if path in self.tree.expanded else '[+]') if directory else ' · '
-                labels.append('  '*min(depth,20)+marker+' '+(label if path==self.tree.root else path.name+('/' if directory else '')))
+                labels.append('  '*min(depth,20)+marker+' '+(str(path) if path==self.tree.root else path.name+('/' if directory else '')))
             return 'home',title,labels,rows
         if self.sections[self.section]=='SSH':
             data=self.catalog.read()
