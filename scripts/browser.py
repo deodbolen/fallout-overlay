@@ -10,7 +10,7 @@ import subprocess
 from navigator_tree import Tree
 from navigator_input import read_key
 
-from ssh_manager import Catalog, username, generate_path, remote_directory, scp_args
+from ssh_manager import Catalog, username, generate_path, remote_directory, scp_args, host_details
 from terminal_sessions import Sessions
 from path_completion import directory_matches, complete_directory
 import crt_settings
@@ -192,11 +192,11 @@ class Navigator:
         while True:
             keys=self.catalog.read()['keys']
             keyname=next((k['name'] for k in keys if k['id']==current['key']),'None (password)')
-            labels=['Common name: '+current['name'],'IP or FQDN: '+current['address'],'User: '+(current['user'] or '(logged-in user: '+username(current)+')'),'SSH key: '+keyname,'SAVE','CANCEL']
+            labels=['Common name: '+current['name'],'IP or FQDN: '+current['address'],'User: '+(current['user'] or '(logged-in user: '+username(current)+')'),'SSH key: '+keyname,'SAVE','CONNECT WITHOUT SAVING','CANCEL']
             self.draw('EDIT HOST' if host else '+ HOST',labels,field)
             key=self.menu_key()
             if key==curses.KEY_UP: field=max(0,field-1)
-            elif key==curses.KEY_DOWN: field=min(5,field+1)
+            elif key==curses.KEY_DOWN: field=min(6,field+1)
             elif key=='\x1b': return
             elif key in ENTER:
                 if field<3:
@@ -210,6 +210,15 @@ class Navigator:
                     try:
                         self.catalog.save_host(current['name'],current['address'],current['user'],current['key'],current.get('id'))
                         self.message='Host saved.'; return
+                    except ValueError as error: self.message=str(error)
+                elif field==5:
+                    try:
+                        temporary=host_details(current['name'].strip() or current['address'],current['address'],current['user'],current['key'])
+                        selected_key=next((item for item in keys if item['id']==temporary['key']),None)
+                        if temporary['key'] and selected_key is None:
+                            raise ValueError('Selected SSH key is no longer saved.')
+                        self.launch('connect',temporary['name'],host=temporary,key=selected_key)
+                        return
                     except ValueError as error: self.message=str(error)
                 else: return
 

@@ -32,6 +32,16 @@ def atomic_json(path, data):
         temp.unlink(missing_ok=True)
 
 
+def host_details(name, address, user='', key='', identifier=None):
+    name, address, user = name.strip(), address.strip(), user.strip()
+    if not name: raise ValueError('Common name is required.')
+    if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9.:%_-]*',address):
+        raise ValueError('Enter an IP address or FQDN, without a user, port, or spaces.')
+    if user and not re.fullmatch(r'[A-Za-z0-9_][A-Za-z0-9_.-]*',user):
+        raise ValueError('Invalid SSH username.')
+    return {'id':identifier or uuid.uuid4().hex,'name':name,'address':address,'user':user,'key':key}
+
+
 class Catalog:
     def __init__(self, directory=None):
         self.directory = Path(directory) if directory else config_dir()
@@ -52,13 +62,7 @@ class Catalog:
             data = self.read(); change(data); atomic_json(self.path,data)
 
     def save_host(self, name, address, user='', key='', identifier=None):
-        name, address, user = name.strip(), address.strip(), user.strip()
-        if not name: raise ValueError('Common name is required.')
-        if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9.:%_-]*',address):
-            raise ValueError('Enter an IP address or FQDN, without a user, port, or spaces.')
-        if user and not re.fullmatch(r'[A-Za-z0-9_][A-Za-z0-9_.-]*',user):
-            raise ValueError('Invalid SSH username.')
-        host={'id':identifier or uuid.uuid4().hex,'name':name,'address':address,'user':user,'key':key}
+        host=host_details(name,address,user,key,identifier)
         def change(data):
             if key and not any(k['id']==key for k in data['keys']): raise ValueError('Selected key is no longer saved.')
             data['hosts']=[h for h in data['hosts'] if h['id']!=host['id']]+[host]
