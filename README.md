@@ -29,7 +29,7 @@ After connecting to a machine with this checkout, run:
 
 The launcher automatically uses the terminal navigator in SSH, including when X forwarding is enabled. Use the actual checkout path if it is installed elsewhere. `./fallout --terminal` forces terminal mode locally. You can also launch it directly with `ssh -t user@host '~/fallout-overlay/fallout'`.
 
-Use Ctrl+Left/Right to change sections, Ctrl+I (or Tab) for navigator shortcut help, and Q to return to the SSH shell. Ctrl+] returns from an attached terminal session to the navigator. Graphical applications and desktop dialogs require the local desktop; terminal applications run in the SSH terminal. This mode leaves the graphical overlay running independently.
+Use Ctrl+G to toggle the saved section modifier between Ctrl and Super. Super+Left/Right requires your terminal to forward those combinations; F6/F7 always select the previous/next section in the navigator. Ctrl+I (or Tab) opens navigator shortcut help, and Q returns to the SSH shell. Ctrl+] returns from an attached terminal session to the navigator. Graphical applications and desktop dialogs require the local desktop; terminal applications run in the SSH terminal. This mode leaves the graphical overlay running independently.
 
 Restore the captured desktop configuration with:
 

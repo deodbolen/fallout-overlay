@@ -203,6 +203,7 @@ class Host:
 
     def background_shortcut(self,widget,event):
         if self.help_shortcut(widget,event): return True
+        if self.modifier_shortcut(widget,event): return True
         modifiers=Gdk.ModifierType.CONTROL_MASK|Gdk.ModifierType.SHIFT_MASK
         if event.state&modifiers==modifiers and Gdk.keyval_to_lower(event.keyval)==Gdk.KEY_b:
             enabled=not navigator_settings.transparent()
@@ -223,6 +224,24 @@ class Host:
             self.background_notice_timer=GLib.timeout_add(2500,clear_notice)
             return True
         return False
+
+    def modifier_shortcut(self,widget,event):
+        modifiers=Gdk.ModifierType.CONTROL_MASK|Gdk.ModifierType.SHIFT_MASK
+        state=event.state&Gtk.accelerator_get_default_mod_mask()
+        key=Gdk.keyval_to_lower(event.keyval)
+        if not ((state==modifiers and key==Gdk.KEY_m) or
+                (state==Gdk.ModifierType.CONTROL_MASK and key==Gdk.KEY_g)):
+            return False
+        chosen='super' if navigator_settings.section_modifier()=='ctrl' else 'ctrl'
+        navigator_settings.save_section_modifier(chosen)
+        self.background_notice.set_text('Section navigation: '+chosen.upper()+' + Left / Right')
+        self.background_notice.show()
+        if self.background_notice_timer: GLib.source_remove(self.background_notice_timer)
+        def clear_notice():
+            self.background_notice.hide(); self.background_notice_timer=None
+            return False
+        self.background_notice_timer=GLib.timeout_add(2500,clear_notice)
+        return True
 
     def draw_background(self,widget,context):
         if self.transparent and self.window.get_screen().is_composited(): return False
@@ -310,6 +329,7 @@ class Host:
         widget.sudo_retry_count=count
 
     def nav_keys(self,widget,event):
+        if self.modifier_shortcut(widget,event): return True
         modifiers=Gdk.ModifierType.CONTROL_MASK|Gdk.ModifierType.MOD1_MASK|Gdk.ModifierType.SUPER_MASK
         if event.keyval in (Gdk.KEY_Left,Gdk.KEY_Right) and event.state&modifiers:
             chosen=Gdk.ModifierType.SUPER_MASK if navigator_settings.section_modifier()=='super' else Gdk.ModifierType.CONTROL_MASK
@@ -369,6 +389,7 @@ class Host:
         widget.keyboard_selection_range=(anchor,end)
 
     def session_keys(self,widget,event):
+        if self.modifier_shortcut(widget,event): return True
         if event.keyval in (Gdk.KEY_Return,Gdk.KEY_KP_Enter):
             self.sounds.play('ok')
         if event.state&Gdk.ModifierType.SHIFT_MASK and not event.state&Gdk.ModifierType.CONTROL_MASK and event.keyval in (Gdk.KEY_Up,Gdk.KEY_Down):

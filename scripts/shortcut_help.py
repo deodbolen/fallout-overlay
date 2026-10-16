@@ -4,6 +4,8 @@
 def text(section, modifier='ctrl', title='', context=''):
     global_keys = ['Ctrl+I   Show keyboard shortcuts',
                    'F12   Show / hide the overlay',
+                   'Ctrl+Shift+M   Switch section modifier: Ctrl / Super',
+                   'Ctrl+G   Switch section modifier: Ctrl / Super',
                    'Ctrl+Shift+B   Toggle transparent background']
     navigation = ['↑ / ↓ or J / K   Select an item', 'Enter   Open / select',
                   'Esc / Backspace   Back', 'Page Up / Page Down   Scroll items',
@@ -28,6 +30,7 @@ def text(section, modifier='ctrl', title='', context=''):
     }
     if section != 'SESSION':
         global_keys.append(modifier.title() + '+← / →   Change section')
+        global_keys.append('F6 / F7   Previous / next section')
     body = 'GLOBAL SHORTCUTS\n' + '\n'.join(global_keys)
     body += '\n\n' + (title or section) + '\n' + '\n'.join(sections.get(section, navigation))
     if context:

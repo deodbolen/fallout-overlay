@@ -12,15 +12,22 @@ def read_key(screen):
         except curses.error: return key  # A standalone Escape still cancels.
         # Some terminals encode Alt+arrow as Escape followed by an arrow's
         # ordinary Escape sequence. Drain it as one unassigned combination.
+        alt_prefix=following=='\x1b'
         while following=='\x1b':
             try: following=screen.get_wch()
             except curses.error: return -1
         if following in ('[','O'):
+            sequence=following
             for _ in range(32):
                 try: part=screen.get_wch()
                 except curses.error: break
+                if isinstance(part,str): sequence+=part
                 if isinstance(part,int) or (isinstance(part,str) and '@'<=part<='~'):
                     break
+            if not alt_prefix:
+                recognized={'[1;5D':('section','ctrl',-1),'[1;5C':('section','ctrl',1),
+                            '[1;9D':('section','super',-1),'[1;9C':('section','super',1)}
+                if sequence in recognized: return recognized[sequence]
         return -1
     finally:
         screen.timeout(delay)

@@ -75,17 +75,34 @@ class Navigator:
         elif key=='\x1b': self.sound('cancel')
 
     def switch_section(self,key):
-        if not isinstance(key,int) or key in (curses.KEY_LEFT,curses.KEY_RIGHT): return False
-        name=curses.keyname(key)
-        if name not in (b'kLFT5',b'kRIT5'): return False
-        step=1 if name==b'kRIT5' else -1
+        if key in (curses.KEY_F6,curses.KEY_F7):
+            step=-1 if key==curses.KEY_F6 else 1
+        elif isinstance(key,tuple) and len(key)==3 and key[0]=='section':
+            if key[1]!=navigator_settings.section_modifier(): return False
+            step=key[2]
+        else:
+            if not isinstance(key,int) or key in (curses.KEY_LEFT,curses.KEY_RIGHT): return False
+            name=curses.keyname(key)
+            if name not in (b'kLFT5',b'kRIT5',b'kLFT9',b'kRIT9'): return False
+            if not os.environ.get('FALLOUT_EMBEDDED_SOCKET'):
+                modifier='super' if name.endswith(b'9') else 'ctrl'
+                if modifier!=navigator_settings.section_modifier(): return False
+            step=1 if name.startswith(b'kRIT') else -1
         self.section=(self.section+step)%len(self.sections)
         self.sound('static'); self.sound('select')
         self.transition_pending=True
         return True
 
+    def modifier_key(self,key):
+        if key!='\x07': return False
+        chosen='super' if navigator_settings.section_modifier()=='ctrl' else 'ctrl'
+        navigator_settings.save_section_modifier(chosen)
+        self.message='Section modifier: '+chosen.title()+'. F6 / F7 also change sections.'
+        return True
+
     def menu_key(self):
         key=read_key(self.screen)
+        if self.modifier_key(key): return -1
         if key=='\t' and not os.environ.get('FALLOUT_EMBEDDED_SOCKET'):
             self.terminal_help()
             return -1
@@ -98,8 +115,9 @@ class Navigator:
         section=('HOME','DATA','SSH','TERMINAL','INV','SETTINGS')[self.section]
         context=getattr(self,'terminal_help_context',('', ''))
         # Ctrl+I and Tab have the same byte in an ordinary terminal.
-        lines=text(section,'ctrl',context[0],context[1]).splitlines()
-        lines=[line for line in lines if not line.startswith(('F12','Ctrl+Shift+B'))]
+        lines=text(section,navigator_settings.section_modifier(),context[0],context[1]).splitlines()
+        lines=[line for line in lines if not line.startswith(('F12','Ctrl+Shift+B','Ctrl+Shift+M'))]
+        lines.append('Super+arrows require terminal forwarding; F6 / F7 work without Super.')
         offset=0
         while True:
             self.screen.erase()
@@ -858,6 +876,7 @@ class Navigator:
                     self.message=''
                     self.navigation_sound(key)
                     if self.switch_section(key): pass
+                    elif self.modifier_key(key): pass
                     elif key=='\t' and not os.environ.get('FALLOUT_EMBEDDED_SOCKET'): self.terminal_help()
                     elif self.switch_data_page(key): pass
                     elif self.switch_ssh_page(key): pass
