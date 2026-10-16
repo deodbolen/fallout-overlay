@@ -86,9 +86,32 @@ class Navigator:
 
     def menu_key(self):
         key=read_key(self.screen)
+        if key=='\t' and not os.environ.get('FALLOUT_EMBEDDED_SOCKET'):
+            self.terminal_help()
+            return -1
         self.navigation_sound(key)
         if self.switch_section(key): raise SectionChanged()
         return key
+
+    def terminal_help(self):
+        from shortcut_help import text
+        section=('HOME','DATA','SSH','TERMINAL','INV','SETTINGS')[self.section]
+        context=getattr(self,'terminal_help_context',('', ''))
+        # Ctrl+I and Tab have the same byte in an ordinary terminal.
+        lines=text(section,'ctrl',context[0],context[1]).splitlines()
+        lines=[line for line in lines if not line.startswith(('F12','Ctrl+Shift+B'))]
+        offset=0
+        while True:
+            self.screen.erase()
+            height,_=self.screen.getmaxyx()
+            self.put(0,'KEYBOARD SHORTCUTS',curses.A_BOLD)
+            for row,line in enumerate(lines[offset:offset+max(1,height-3)],2): self.put(row,line)
+            self.screen.refresh()
+            try: key=read_key(self.screen)
+            except curses.error: continue
+            if key in ('\x1b','\t','q',*ENTER): return
+            if key==curses.KEY_DOWN: offset=min(max(0,len(lines)-max(1,height-3)),offset+1)
+            if key==curses.KEY_UP: offset=max(0,offset-1)
 
     def put(self,y,text,attr=0):
         h,w=self.screen.getmaxyx()
@@ -98,6 +121,7 @@ class Navigator:
             except curses.error: pass
 
     def draw(self,title,labels,selected=0,footer='',detail='',refresh=True):
+        self.terminal_help_context=(title,footer)
         if refresh: self.native_clock('')
         h,w=self.screen.getmaxyx(); self.screen.erase()
         tabs='   '.join(('[  '+s+'  ]' if s=='⚙️' else '['+s+']') if i==self.section else s for i,s in enumerate(self.sections))
@@ -470,7 +494,12 @@ class Navigator:
             from embedded_client import request
             request('hide')
 
+    def require_desktop(self):
+        if os.environ.get('FALLOUT_TERMINAL_ONLY'):
+            raise ValueError('This action requires the graphical desktop. Use a terminal application in SSH.')
+
     def open_gui(self,path,application=None):
+        self.require_desktop()
         path=Path(path).absolute()
         if application is not None:
             executable=Path(application).expanduser()
@@ -622,6 +651,7 @@ class Navigator:
         elif choice==9: self.open_with(path)
 
     def update_settings(self):
+        self.require_desktop()
         self.hide_for_application()
         command=['/usr/bin/python3',str(Path(__file__).with_name('update_app.py'))]
         env=dict(os.environ)
@@ -648,6 +678,7 @@ class Navigator:
                     except (ValueError,TypeError): self.message='Enter a whole number from 8 to 32.'
 
     def network_settings(self):
+        self.require_desktop()
         executable=shutil.which('nm-connection-editor')
         if not executable:
             raise ValueError('Network configuration requires nm-connection-editor. Run the installer.')
@@ -803,6 +834,7 @@ class Navigator:
                     args.append(token.replace('%c',app['name']).replace('%k',app['path']).replace('%%','%'))
                 if args: self.launch('command',app['name'],argv=args)
             else:
+                self.require_desktop()
                 subprocess.Popen(['gio','launch',app['path']],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
                 self.hide_for_application()
 
@@ -826,6 +858,7 @@ class Navigator:
                     self.message=''
                     self.navigation_sound(key)
                     if self.switch_section(key): pass
+                    elif key=='\t' and not os.environ.get('FALLOUT_EMBEDDED_SOCKET'): self.terminal_help()
                     elif self.switch_data_page(key): pass
                     elif self.switch_ssh_page(key): pass
                     elif self.switch_inventory_page(key): pass

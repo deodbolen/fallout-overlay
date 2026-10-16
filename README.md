@@ -19,6 +19,18 @@ Installation sets the Pip-Boy wallpaper on connected monitors and workspaces, di
 
 Press **F12** to show or hide the navigator. If F12 already has a custom binding, the installer uses **Ctrl+Alt+F12**.
 
+### Run over SSH
+
+After connecting to a machine with this checkout, run:
+
+```sh
+~/fallout-overlay/fallout
+```
+
+The launcher automatically uses the terminal navigator in SSH, including when X forwarding is enabled. Use the actual checkout path if it is installed elsewhere. `./fallout --terminal` forces terminal mode locally. You can also launch it directly with `ssh -t user@host '~/fallout-overlay/fallout'`.
+
+Use Ctrl+Left/Right to change sections, Ctrl+I (or Tab) for navigator shortcut help, and Q to return to the SSH shell. Ctrl+] returns from an attached terminal session to the navigator. Graphical applications and desktop dialogs require the local desktop; terminal applications run in the SSH terminal. This mode leaves the graphical overlay running independently.
+
 Restore the captured desktop configuration with:
 
 ```sh
