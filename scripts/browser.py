@@ -9,6 +9,7 @@ import subprocess
 
 from navigator_tree import Tree
 from navigator_input import read_key
+from text_entry import TextField, draw_box, cursor as input_cursor
 
 from ssh_manager import Catalog, username, generate_path, remote_directory, scp_args, host_details
 from terminal_sessions import Sessions
@@ -195,23 +196,23 @@ class Navigator:
             elif key in ('\x1b','q'): return None
 
     def text(self,label,initial='',directory_base=None):
-        value=initial
+        field=TextField(initial)
         selected=0; explicit=False
-        curses.curs_set(1)
+        input_cursor(True)
         try:
             while True:
+                value=field.value
                 matches=directory_matches(value,directory_base) if directory_base is not None else []
                 if directory_base is not None:
                     selected=min(selected,max(0,len(matches)-1))
-                    limit=max(1,self.screen.getmaxyx()[0]-8)
+                    limit=max(1,self.screen.getmaxyx()[0]-12)
                     start=max(0,selected-limit+1)
-                    labels=[value,'Available directories:']+[entry for entry in matches[start:start+limit]]
+                    labels=['','','','','Available directories:']+[entry for entry in matches[start:start+limit]]
                     if not matches: labels.append('(no matching directories)')
-                    self.draw(label,labels,selected-start+2 if matches else 0,footer='TAB COMPLETE  ↑↓ CHOOSE  ENTER ACCEPT  CTRL+U CLEAR  ESC CANCEL')
-                    h,w=self.screen.getmaxyx()
-                    if h>3 and w>1: self.screen.move(3,min(len(value),w-2)); self.screen.refresh()
+                    self.draw(label,labels,selected-start+5 if matches else 0,footer='TAB COMPLETE  ↑↓ CHOOSE  ENTER ACCEPT  CTRL+U CLEAR  ESC CANCEL',refresh=False)
                 else:
-                    self.draw(label,[value],footer='TYPE VALUE  ENTER ACCEPT  ESC CANCEL')
+                    self.draw(label,[],footer='TYPE VALUE  ←→ MOVE CURSOR  ENTER ACCEPT  CTRL+U CLEAR  ESC CANCEL',refresh=False)
+                draw_box(self.screen,field)
                 key=read_key(self.screen)
                 if key in ENTER: return value.strip()
                 if key=='\x1b': return None
@@ -220,14 +221,12 @@ class Navigator:
                     selected=max(0,min(len(matches)-1,selected+step)); explicit=True
                     continue
                 if directory_base is not None and key=='\t':
-                    value=complete_directory(value,matches,selected,explicit)
+                    field.replace(complete_directory(value,matches,selected,explicit))
                     selected=0; explicit=False
                     continue
                 selected=0; explicit=False
-                if key in (curses.KEY_BACKSPACE,'\x7f','\b'): value=value[:-1]
-                elif key=='\x15': value=''
-                elif isinstance(key,str) and key.isprintable() and len(value)<512: value+=key
-        finally: curses.curs_set(0)
+                field.edit(key)
+        finally: input_cursor(False)
 
     def host_form(self,host=None):
         current=dict(host or {'name':'','address':'','user':'','key':''})

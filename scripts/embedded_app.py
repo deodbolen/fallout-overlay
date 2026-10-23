@@ -152,6 +152,7 @@ class Host:
         terminal.set_color_foreground(color('#b6ffa3'))
         terminal.set_color_background(color('rgba(5,10,6,0)'))
         terminal.set_color_cursor(color('#9dff72'))
+        terminal.set_cursor_blink_mode(Vte.CursorBlinkMode.ON)
         palette='#09110b;#ff6b6b;#9dff72;#ffe478;#8ab4ff;#eda6ff;#89f5ee;#d7f5d0;#6a8c6b;#ff9393;#b6ffa3;#fff3a1;#b4ceff;#f6c5ff;#b6fff6;#f3fff0'
         terminal.set_colors(color('#b6ffa3'),color('rgba(5,10,6,0)'),[color(c) for c in palette.split(';')])
         terminal.set_scrollback_lines(10000); terminal.set_audible_bell(False)

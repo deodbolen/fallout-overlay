@@ -59,7 +59,12 @@ def connect(host,key):
     if code==255 and 'Permission denied' in errors:
         choice=input('\nKey authentication failed. Push this public key? [y/N] ').strip().lower()
         if choice=='y':
-            directory=input('Remote SSH directory [~/.ssh]: ').strip() or '~/.ssh'
+            from text_entry import terminal_text
+            directory=terminal_text('REMOTE SSH DIRECTORY','~/.ssh')
+            if directory is None:
+                print('Connection cancelled.')
+                return code
+            directory=directory or '~/.ssh'
             if push(host,key,directory)==0:
                 return interactive_ssh(ssh_args(host,key,key_only=True))[0]
         else: print('Connection cancelled. Host and key were not changed.')
