@@ -10,6 +10,7 @@ import subprocess
 from navigator_tree import Tree
 from navigator_input import read_key
 from text_entry import TextField, draw_box, cursor as input_cursor
+from system_dashboard import SystemDashboard
 
 from ssh_manager import Catalog, username, generate_path, remote_directory, scp_args, host_details
 from terminal_sessions import Sessions
@@ -59,6 +60,8 @@ class Navigator:
         self.sections=['HOME','DATA','SSH','TERMINAL','INV','⚙️']
         self.inv_index=0
         self.settings_index=0
+        self.home_index=1
+        self.dashboard=SystemDashboard()
         self.page='hosts'
         self.selected={}
         self.message=''
@@ -139,7 +142,7 @@ class Navigator:
             try: self.screen.addnstr(y,0,text,w-1,attr)
             except curses.error: pass
 
-    def draw(self,title,labels,selected=0,footer='',detail='',refresh=True):
+    def draw(self,title,labels,selected=0,footer='',detail='',refresh=True,highlight=True):
         self.terminal_help_context=(title,footer)
         if refresh: self.native_clock('')
         h,w=self.screen.getmaxyx(); self.screen.erase()
@@ -147,8 +150,9 @@ class Navigator:
         self.put(0,'ROBCO TERMLINK // '+tabs,curses.A_BOLD)
         self.put(1,title,curses.A_BOLD)
         visible=max(1,h-6); offset=max(0,selected-visible+1)
+        if not highlight: offset=min(selected,max(0,len(labels)-visible))
         for index,label in enumerate(labels[offset:offset+visible],offset):
-            self.put(3+index-offset,label,curses.A_REVERSE if index==selected else 0)
+            self.put(3+index-offset,label,curses.A_REVERSE if highlight and index==selected else 0)
         self.put(h-2,detail or self.message)
         footer=footer.replace('CTRL+←→',navigator_settings.section_modifier().upper()+'+←→')
         if os.environ.get('FALLOUT_EMBEDDED_SOCKET'):
@@ -170,7 +174,7 @@ class Navigator:
     def draw_clock(self):
         now=datetime.now()
         # Present the frame only after the digits are drawn, avoiding a blank flash.
-        self.draw('LOCAL TIME',[],footer='',detail=' ',refresh=False)
+        self.draw('HOME // [CLOCK]   SYSTEM',[],footer='',detail=' ',refresh=False)
         h,w=self.screen.getmaxyx()
         value=now.strftime('%H:%M')
         if not self.native_clock(value):
@@ -375,6 +379,13 @@ class Navigator:
         self.sound('select')
         return True
 
+    def switch_home_page(self,key):
+        if self.sections[self.section]!='HOME' or key not in (curses.KEY_LEFT,curses.KEY_RIGHT): return False
+        self.home_index=0 if key==curses.KEY_LEFT else 1
+        self.message=''
+        self.sound('select')
+        return True
+
     def data_pages(self):
         if os.environ.get('FALLOUT_EMBEDDED_SOCKET') and time.monotonic()-self.discovery_checked>=2:
             self.discovery_checked=time.monotonic()
@@ -420,7 +431,8 @@ class Navigator:
 
     def rows(self):
         if self.sections[self.section]=='HOME':
-            return 'clock','LOCAL TIME',[],[]
+            if self.home_index==0: return 'clock','HOME // [CLOCK]   SYSTEM',[],[]
+            return 'dashboard','HOME // CLOCK   [SYSTEM]',self.dashboard.lines(self.screen.getmaxyx()[1]),[]
         if self.sections[self.section]=='DATA':
             pages=self.data_pages()
             identity,label=pages[self.data_index]
@@ -861,10 +873,13 @@ class Navigator:
             while True:
                 try:
                     page,title,labels,items=self.rows()
-                    index=max(0,min(self.selected.get(page,0),len(labels)-1))
+                    limit=len(labels)-(max(1,self.screen.getmaxyx()[0]-6) if page=='dashboard' else 1)
+                    index=max(0,min(self.selected.get(page,0),limit))
                     self.selected[page]=index
                     detail=(self.message or str(items[index][0])) if page=='home' else self.message
-                    redraw=self.draw_clock if page=='clock' else lambda: self.draw(title,labels,index,detail=detail)
+                    if page=='dashboard' and not detail:
+                        detail='LIVE  |  '+datetime.now().strftime('%H:%M:%S')+'  |  '+str(index+1)+'–'+str(min(len(labels),index+max(1,self.screen.getmaxyx()[0]-6)))+' / '+str(len(labels))
+                    redraw=self.draw_clock if page=='clock' else lambda: self.draw(title,labels,index,detail=detail,highlight=page!='dashboard')
                     if self.transition_pending:
                         self.transition_pending=False
                         animate_section(self.screen,redraw)
@@ -881,6 +896,7 @@ class Navigator:
                     elif self.switch_ssh_page(key): pass
                     elif self.switch_inventory_page(key): pass
                     elif self.switch_settings_page(key): pass
+                    elif self.switch_home_page(key): pass
                     elif key in (curses.KEY_DOWN,'j'): self.selected[page]=min(len(labels)-1,index+1)
                     elif key in (curses.KEY_UP,'k'): self.selected[page]=max(0,index-1)
                     elif key==curses.KEY_NPAGE: self.selected[page]=min(len(labels)-1,index+max(1,self.screen.getmaxyx()[0]-6))

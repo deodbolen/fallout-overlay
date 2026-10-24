@@ -11,7 +11,9 @@ def text(section, modifier='ctrl', title='', context=''):
                   'Esc / Backspace   Back', 'Page Up / Page Down   Scroll items',
                   'Q   Exit the overlay']
     sections = {
-        'HOME': ['P   Open the power menu', 'Tab   Focus the power button',
+        'HOME': ['← / →   Switch Clock / System dashboard',
+                 '↑ / ↓ / Page Up / Page Down   Scroll system statistics',
+                 'P   Open the power menu', 'Tab   Focus the power button',
                  'Space / Enter   Activate the focused button'],
         'DATA': navigation + ['← / →   Change Data page', 'Ctrl+M or M   File menu',
                               'Enter in Trash   Restore / permanently delete; Empty Trash clears all items',

@@ -122,7 +122,7 @@ class Host:
         GLib.timeout_add(250,self.refresh)
 
     def update_power_button(self):
-        self.power_button.set_visible(bool(self.clock_value) and self.stack.get_visible_child_name()=='navigator')
+        self.power_button.set_visible(self.shortcut_context['section']==0 and self.stack.get_visible_child_name()=='navigator')
 
     def open_power_menu(self,button):
         # Use XFCE's session dialog so power actions follow the desktop's policies.
@@ -556,6 +556,7 @@ class Host:
                         if command=='launch': reply(self.launch(request['action'],request['label'],request.get('details',{})))
                         elif command=='shortcut_context':
                             self.shortcut_context={'section':int(request['section']),'title':str(request.get('title',''))[:160],'context':str(request.get('context',''))[:512]}
+                            self.update_power_button()
                             reply({})
                         elif command=='browse_network': reply(self.discovery.browse(request.get('uri','network:///'),request.get('refresh',False)))
                         elif command=='mount_server': self.mount_server(request['uri'],reply)
