@@ -26,6 +26,7 @@ def text(section, modifier='ctrl', title='', context=''):
         'SETTINGS': navigation + ['← / →   Switch Display / Audio / Controls / Network / System',
                                   '+ / −   Adjust the selected font or volume setting'],
         'SESSION': ['Ctrl+]   Return to navigator', 'Ctrl+↑ / ↓   Switch sessions',
+                    'Terminal over SSH: F6 / F7   Previous / next session',
                     'Ctrl+Shift+W   Close session', 'Ctrl+Shift+C / V   Copy / paste',
                     'Ctrl+Shift+A   Select all', 'Shift+↑ / ↓   Select text',
                     'Enter   Return after a session has ended'],

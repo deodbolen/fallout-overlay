@@ -1,5 +1,6 @@
 """Recognize navigator shortcuts even when terminal escape sequences split."""
 SHORTCUTS={b'\x1b[1;5A':'previous',b'\x1b[1;5B':'next',b'\x1b[5A':'previous',b'\x1b[5B':'next',b'\x1d':'detach'}
+SHORTCUTS.update({b'\x1b[17~':'previous',b'\x1b[18~':'next'})
 
 class InputRouter:
     def __init__(self): self.pending=b''

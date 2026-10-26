@@ -4,6 +4,14 @@ from session_input import InputRouter
 from terminal_sessions import Sessions
 
 class SessionSwitchingTests(unittest.TestCase):
+    def test_terminal_function_keys_and_passthrough(self):
+        for ending,action in ((b'7~','previous'),(b'8~','next')):
+            router=InputRouter()
+            self.assertEqual(router.feed(b'\x1b[1'),(b'',None,b''))
+            self.assertEqual(router.feed(ending+b'pwd'),(b'',action,b'pwd'))
+        router=InputRouter()
+        self.assertEqual(router.feed(b'\x18e'),(b'\x18e',None,b''))
+        self.assertEqual(router.feed(b'\x18n'),(b'\x18n',None,b''))
     def test_shortcuts_and_ordinary_arrows(self):
         router=InputRouter()
         self.assertEqual(router.feed(b'pwd\r\x1b[1;5Bnext'),(b'pwd\r','next',b'next'))
@@ -62,6 +70,7 @@ class SessionSwitchingTests(unittest.TestCase):
         scope={'Gdk':gdk,'GLib':SimpleNamespace(idle_add=lambda callback:callback())}
         exec(compile(ast.Module(body=methods,type_ignores=[]),'<session-methods>','exec'),scope)
         instance=Mock(); instance.current='active'
+        instance.modifier_shortcut.return_value=False
         self.assertTrue(scope['session_keys'](instance,Mock(),SimpleNamespace(state=3,keyval=119)))
         instance.close_session.assert_called_once_with('active')
         record={'path':Mock(),'terminal':Mock(),'closed':False}

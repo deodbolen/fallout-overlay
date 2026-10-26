@@ -6,7 +6,7 @@ class FooterTests(unittest.TestCase):
         stream.feed(b'\x1b[2J'+b'command output\r\n'*30)
         output=render(screen,10,90,full=True).decode()
         self.assertIn('\x1b[10;1H',output)
-        self.assertIn('Hold Ctrl and press ]',output)
+        self.assertIn('F6 Previous session',output)
         self.assertEqual(screen.lines,9)
     def test_alternate_screen_restores_shell(self):
         screen=TerminalScreen(90,9); stream=pyte.ByteStream(screen)
@@ -17,7 +17,7 @@ class FooterTests(unittest.TestCase):
         screen=TerminalScreen(90,9); screen.resize(lines=19,columns=110)
         output=render(screen,20,110,full=True).decode()
         self.assertIn('\x1b[20;1H',output)
-        self.assertIn('Session stays running',output)
+        self.assertIn('F7 Next session',output)
     def test_cursor_queries_reply_to_pty(self):
         replies=[]; screen=TerminalScreen(90,9,replies.append); stream=pyte.ByteStream(screen)
         stream.feed(b'hello\x1b[6n')
