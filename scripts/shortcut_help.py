@@ -35,6 +35,7 @@ def text(section, modifier='ctrl', title='', context=''):
                     'Enter   Return after a session has ended'],
     }
     if section != 'SESSION':
+        global_keys.append('F1 / F2   Previous / next section')
         global_keys.append(modifier.title() + '+← / →   Change section')
         global_keys.append('[ / ]   Previous / next section; no terminal setup required')
         global_keys.append('Terminal over SSH: Ctrl+Shift+← / →   Previous / next section')

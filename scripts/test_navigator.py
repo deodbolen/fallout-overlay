@@ -6,12 +6,23 @@ import subprocess
 import tempfile
 import time
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from ssh_manager import Catalog, remote_command, ssh_args, public_key, username
-from browser import Tree
+from browser import Navigator, Tree
 from terminal_sessions import Session
 
 class NavigatorTests(unittest.TestCase):
+    def test_f1_f2_navigate_before_any_terminal_exists(self):
+        import curses
+        navigator=Navigator(Mock())
+        navigator.sound=Mock()
+        self.assertEqual(navigator.sessions.items,[])
+        for expected in ('DATA','SSH','TERMINAL'):
+            self.assertTrue(navigator.switch_section(curses.KEY_F2))
+            self.assertEqual(navigator.sections[navigator.section],expected)
+        self.assertTrue(navigator.switch_section(curses.KEY_F1))
+        self.assertEqual(navigator.sections[navigator.section],'SSH')
+        self.assertEqual(navigator.sessions.items,[])
     def test_catalog_save_edit_and_blank_user(self):
         with tempfile.TemporaryDirectory() as d:
             catalog=Catalog(d)
