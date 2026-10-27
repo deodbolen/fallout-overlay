@@ -54,7 +54,7 @@ def style(char):
     return '\x1b['+';'.join(codes)+'m'
 
 
-def render(screen,physical_lines,columns,full=False):
+def render(screen,physical_lines,columns,full=False,session_status=''):
     """Paint virtual content; session escape sequences never reach the footer."""
     rows=range(screen.lines) if full else sorted(screen.dirty)
     output=['\x1b[?25l\x1b[?7l']
@@ -67,7 +67,7 @@ def render(screen,physical_lines,columns,full=False):
             current=style(char)
             if current!=previous: output.append(current); previous=current
             output.append(char.data)
-    footer=FOOTER[:max(0,columns-1)]
+    footer=((session_status+' | ' if session_status else '')+FOOTER)[:max(0,columns-1)]
     output.append(f'\x1b[{physical_lines};1H\x1b[0;1;7;92m\x1b[2K'+footer+'\x1b[0m')
     output.append(f'\x1b[{min(screen.cursor.y,screen.lines-1)+1};{min(screen.cursor.x,columns-1)+1}H')
     output.append('\x1b[?7h')

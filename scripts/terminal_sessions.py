@@ -76,7 +76,7 @@ class Session:
             with self.lock:
                 self.display.resize(lines=max(1,size.lines-1),columns=size.columns)
                 os.write(sys.stdout.fileno(),b'\x1b[0m\x1b[2J\x1b[H')
-                os.write(sys.stdout.fileno(),render(self.display,size.lines,size.columns,full=True))
+                os.write(sys.stdout.fileno(),render(self.display,size.lines,size.columns,full=True,session_status=getattr(self,'navigation_status','')))
                 self.attached=True
                 painted=self.revision
             while self.process.poll() is None:
@@ -97,7 +97,7 @@ class Session:
                     with self.lock: self.display.resize(lines=max(1,size.lines-1),columns=size.columns)
                 with self.lock:
                     if self.display.dirty or self.revision!=painted:
-                        os.write(sys.stdout.fileno(),render(self.display,size.lines,size.columns))
+                        os.write(sys.stdout.fileno(),render(self.display,size.lines,size.columns,session_status=getattr(self,'navigation_status','')))
                         painted=self.revision
         finally:
             with self.lock: self.attached=False
@@ -134,6 +134,9 @@ class Sessions:
     def attach(self,screen,session,on_switch=lambda session: None):
         router=InputRouter(); pending=b''
         while session.process.poll() is None:
+            active=[item for item in self.items if item.process.poll() is None]
+            if session in active:
+                session.navigation_status=f'Session {active.index(session)+1}/{len(active)}'
             on_switch(session)
             action,pending=session.attach(screen,router,pending)
             if action in ('section_previous','section_next'): return action

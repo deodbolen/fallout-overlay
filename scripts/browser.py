@@ -104,8 +104,23 @@ class Navigator:
         self.message='Section modifier: '+chosen.title()+'. Ctrl+Shift+Left / Right also change sections.'
         return True
 
+    def terminal_session_key(self,key):
+        if key not in (curses.KEY_F1,curses.KEY_F2): return False
+        active=[session for session in self.sessions.items if session.status in ('running','starting')]
+        if not active:
+            self.message='No running terminal sessions. Open one in Terminal first.'
+            return True
+        selected=self.selected.get('terminal',0)-1
+        current=self.sessions.items[selected] if 0<=selected<len(self.sessions.items) else None
+        step=-1 if key==curses.KEY_F1 else 1
+        index=(active.index(current)+step)%len(active) if current in active else (-1 if step==-1 else 0)
+        self.section=self.sections.index('TERMINAL')
+        self.attach_session(active[index])
+        return True
+
     def menu_key(self):
         key=read_key(self.screen)
+        if self.terminal_session_key(key): raise SectionChanged()
         if self.modifier_key(key): return -1
         if key=='\t' and not os.environ.get('FALLOUT_EMBEDDED_SOCKET'):
             self.terminal_help()
@@ -892,6 +907,7 @@ class Navigator:
                     self.message=''
                     self.navigation_sound(key)
                     if self.switch_section(key): pass
+                    elif self.terminal_session_key(key): pass
                     elif self.modifier_key(key): pass
                     elif key=='\t' and not os.environ.get('FALLOUT_EMBEDDED_SOCKET'): self.terminal_help()
                     elif self.switch_data_page(key): pass

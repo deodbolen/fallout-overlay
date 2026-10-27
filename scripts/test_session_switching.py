@@ -88,12 +88,15 @@ class SessionSwitchingTests(unittest.TestCase):
         host=next(node for node in source.body if isinstance(node,ast.ClassDef) and node.name=='Host')
         methods=[node for node in host.body if isinstance(node,ast.FunctionDef) and node.name in ('session_keys','remove_session','child_exited')]
         gdk=SimpleNamespace(ModifierType=SimpleNamespace(CONTROL_MASK=1,SHIFT_MASK=2),
-                            KEY_Return=10,KEY_KP_Enter=11,KEY_Up=12,KEY_Down=13,KEY_w=119,
+                            KEY_Return=10,KEY_KP_Enter=11,KEY_Up=12,KEY_Down=13,KEY_w=119,KEY_F1=201,KEY_F2=202,
                             keyval_to_lower=lambda key:key)
-        scope={'Gdk':gdk,'GLib':SimpleNamespace(idle_add=lambda callback:callback())}
+        scope={'Gdk':gdk,'GLib':SimpleNamespace(idle_add=lambda callback:callback()),
+               'Gtk':SimpleNamespace(accelerator_get_default_mod_mask=lambda:3)}
         exec(compile(ast.Module(body=methods,type_ignores=[]),'<session-methods>','exec'),scope)
         instance=Mock(); instance.current='active'
         instance.modifier_shortcut.return_value=False
+        self.assertTrue(scope['session_keys'](instance,Mock(),SimpleNamespace(state=0,keyval=201)))
+        instance.cycle.assert_called_once_with(-1)
         self.assertTrue(scope['session_keys'](instance,Mock(),SimpleNamespace(state=3,keyval=119)))
         instance.close_session.assert_called_once_with('active')
         record={'path':Mock(),'terminal':Mock(),'closed':False}
