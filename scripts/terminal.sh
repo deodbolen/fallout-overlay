@@ -1,5 +1,8 @@
 #!/bin/sh
 base=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+if [ "${1:-}" = '--keys' ]; then
+    exec /usr/bin/python3 "$base/scripts/key_probe.py"
+fi
 # SSH always stays in its terminal, even if X forwarding supplies DISPLAY.
 # --terminal also makes the text UI available from a local terminal.
 if [ "${1:-}" = '--terminal' ]; then
