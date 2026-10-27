@@ -4,6 +4,14 @@ from session_input import InputRouter
 from terminal_sessions import Sessions
 
 class SessionSwitchingTests(unittest.TestCase):
+    def test_f1_f2_encodings_and_split_packets(self):
+        for sequence,action in ((b'\x1bOP','previous'),(b'\x1bOQ','next'),
+                                (b'\x1b[11~','previous'),(b'\x1b[12~','next'),
+                                (b'\x1b[[A','previous'),(b'\x1b[[B','next')):
+            for split in range(1,len(sequence)):
+                router=InputRouter()
+                self.assertEqual(router.feed(sequence[:split]),(b'',None,b''))
+                self.assertEqual(router.feed(sequence[split:]),(b'',action,b''))
     def test_portable_session_shortcuts_need_no_escape_sequence(self):
         router=InputRouter()
         self.assertEqual(router.feed(b'\x0f'),(b'','previous',b''))

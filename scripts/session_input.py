@@ -3,6 +3,9 @@ SHORTCUTS={b'\x1b[1;5A':'previous',b'\x1b[1;5B':'next',b'\x1b[5A':'previous',b'\
 SHORTCUTS.update({b'\x1b[1;6A':'previous',b'\x1b[1;6B':'next',
                   b'\x1b[1;6D':'section_previous',b'\x1b[1;6C':'section_next'})
 SHORTCUTS.update({b'\x0f':'previous',b'\x10':'next'})
+SHORTCUTS.update({b'\x1bOP':'previous',b'\x1bOQ':'next',
+                  b'\x1b[11~':'previous',b'\x1b[12~':'next',
+                  b'\x1b[[A':'previous',b'\x1b[[B':'next'})
 
 class InputRouter:
     def __init__(self): self.pending=b''
