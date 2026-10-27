@@ -79,7 +79,9 @@ class Navigator:
         elif key=='\x1b': self.sound('cancel')
 
     def switch_section(self,key):
-        if isinstance(key,tuple) and len(key)==3 and key[0]=='section':
+        if key in ('[',']'):
+            step=-1 if key=='[' else 1
+        elif isinstance(key,tuple) and len(key)==3 and key[0]=='section':
             if key[1]!='ctrlshift' and key[1]!=navigator_settings.section_modifier(): return False
             step=key[2]
         else:
