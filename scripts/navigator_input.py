@@ -26,6 +26,7 @@ def read_key(screen):
                     break
             if not alt_prefix:
                 recognized={'[1;5D':('section','ctrl',-1),'[1;5C':('section','ctrl',1),
+                            '[1;6D':('section','ctrlshift',-1),'[1;6C':('section','ctrlshift',1),
                             '[1;9D':('section','super',-1),'[1;9C':('section','super',1)}
                 if sequence in recognized: return recognized[sequence]
         return -1

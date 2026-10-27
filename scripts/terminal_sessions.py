@@ -136,6 +136,7 @@ class Sessions:
         while session.process.poll() is None:
             on_switch(session)
             action,pending=session.attach(screen,router,pending)
+            if action in ('section_previous','section_next'): return action
             if action not in ('next','previous'): return
             active=[s for s in self.items if s.process.poll() is None and s.status in ('running','starting')]
             if not active: continue

@@ -79,16 +79,14 @@ class Navigator:
         elif key=='\x1b': self.sound('cancel')
 
     def switch_section(self,key):
-        if key in (curses.KEY_F6,curses.KEY_F7):
-            step=-1 if key==curses.KEY_F6 else 1
-        elif isinstance(key,tuple) and len(key)==3 and key[0]=='section':
-            if key[1]!=navigator_settings.section_modifier(): return False
+        if isinstance(key,tuple) and len(key)==3 and key[0]=='section':
+            if key[1]!='ctrlshift' and key[1]!=navigator_settings.section_modifier(): return False
             step=key[2]
         else:
             if not isinstance(key,int) or key in (curses.KEY_LEFT,curses.KEY_RIGHT): return False
             name=curses.keyname(key)
-            if name not in (b'kLFT5',b'kRIT5',b'kLFT9',b'kRIT9'): return False
-            if not os.environ.get('FALLOUT_EMBEDDED_SOCKET'):
+            if name not in (b'kLFT5',b'kRIT5',b'kLFT6',b'kRIT6',b'kLFT9',b'kRIT9'): return False
+            if not os.environ.get('FALLOUT_EMBEDDED_SOCKET') and not name.endswith(b'6'):
                 modifier='super' if name.endswith(b'9') else 'ctrl'
                 if modifier!=navigator_settings.section_modifier(): return False
             step=1 if name.startswith(b'kRIT') else -1
@@ -101,7 +99,7 @@ class Navigator:
         if key!='\x07': return False
         chosen='super' if navigator_settings.section_modifier()=='ctrl' else 'ctrl'
         navigator_settings.save_section_modifier(chosen)
-        self.message='Section modifier: '+chosen.title()+'. F6 / F7 also change sections.'
+        self.message='Section modifier: '+chosen.title()+'. Ctrl+Shift+Left / Right also change sections.'
         return True
 
     def menu_key(self):
@@ -121,7 +119,7 @@ class Navigator:
         # Ctrl+I and Tab have the same byte in an ordinary terminal.
         lines=text(section,navigator_settings.section_modifier(),context[0],context[1]).splitlines()
         lines=[line for line in lines if not line.startswith(('F12','Ctrl+Shift+B','Ctrl+Shift+M'))]
-        lines.append('Super+arrows require terminal forwarding; F6 / F7 work without Super.')
+        lines.append('Super+arrows require terminal forwarding; Ctrl+Shift+arrows are also supported.')
         offset=0
         while True:
             self.screen.erase()
@@ -278,7 +276,9 @@ class Navigator:
     def attach_session(self,session):
         def selected(current):
             self.selected['terminal']=self.sessions.items.index(current)+1
-        self.sessions.attach(self.screen,session,selected)
+        action=self.sessions.attach(self.screen,session,selected)
+        if action in ('section_previous','section_next'):
+            self.switch_section(('section','ctrlshift',-1 if action=='section_previous' else 1))
 
     def choose_key(self):
         keys=self.catalog.read()['keys']

@@ -26,14 +26,15 @@ def text(section, modifier='ctrl', title='', context=''):
         'SETTINGS': navigation + ['← / →   Switch Display / Audio / Controls / Network / System',
                                   '+ / −   Adjust the selected font or volume setting'],
         'SESSION': ['Ctrl+]   Return to navigator', 'Ctrl+↑ / ↓   Switch sessions',
-                    'Terminal over SSH: F6 / F7   Previous / next session',
+                    'Terminal over SSH: Ctrl+Shift+↑ / ↓   Previous / next session',
+                    'Terminal over SSH: Ctrl+Shift+← / →   Previous / next section',
                     'Ctrl+Shift+W   Close session', 'Ctrl+Shift+C / V   Copy / paste',
                     'Ctrl+Shift+A   Select all', 'Shift+↑ / ↓   Select text',
                     'Enter   Return after a session has ended'],
     }
     if section != 'SESSION':
         global_keys.append(modifier.title() + '+← / →   Change section')
-        global_keys.append('F6 / F7   Previous / next section')
+        global_keys.append('Terminal over SSH: Ctrl+Shift+← / →   Previous / next section')
     body = 'GLOBAL SHORTCUTS\n' + '\n'.join(global_keys)
     body += '\n\n' + (title or section) + '\n' + '\n'.join(sections.get(section, navigation))
     if context:

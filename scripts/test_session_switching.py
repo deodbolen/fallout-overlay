@@ -4,14 +4,22 @@ from session_input import InputRouter
 from terminal_sessions import Sessions
 
 class SessionSwitchingTests(unittest.TestCase):
-    def test_terminal_function_keys_and_passthrough(self):
-        for ending,action in ((b'7~','previous'),(b'8~','next')):
+    def test_terminal_shift_arrows_and_passthrough(self):
+        for ending,action in ((b'A','previous'),(b'B','next'),(b'D','section_previous'),(b'C','section_next')):
             router=InputRouter()
-            self.assertEqual(router.feed(b'\x1b[1'),(b'',None,b''))
+            self.assertEqual(router.feed(b'\x1b[1;6'),(b'',None,b''))
             self.assertEqual(router.feed(ending+b'pwd'),(b'',action,b'pwd'))
         router=InputRouter()
         self.assertEqual(router.feed(b'\x18e'),(b'\x18e',None,b''))
         self.assertEqual(router.feed(b'\x18n'),(b'\x18n',None,b''))
+        self.assertEqual(router.feed(b'\x1b[17~'),(b'\x1b[17~',None,b''))
+
+    def test_section_shortcut_returns_to_navigator_without_closing_session(self):
+        session=Mock(); session.process.poll.return_value=None
+        session.attach.return_value=('section_next',b'')
+        sessions=Sessions(); sessions.items=[session]
+        self.assertEqual(sessions.attach(Mock(),session),'section_next')
+        session.close.assert_not_called()
     def test_shortcuts_and_ordinary_arrows(self):
         router=InputRouter()
         self.assertEqual(router.feed(b'pwd\r\x1b[1;5Bnext'),(b'pwd\r','next',b'next'))

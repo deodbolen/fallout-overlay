@@ -6,7 +6,7 @@ import sys
 sys.path.insert(0,str(Path(__file__).resolve().parent.parent/'vendor/python'))
 import pyte
 
-FOOTER='Ctrl+] Navigator | F6 Previous session | F7 Next session'
+FOOTER='Ctrl+] Navigator | Ctrl+Shift+Up/Down Sessions | Ctrl+Shift+Left/Right Sections'
 
 class TerminalScreen(pyte.Screen):
     def __init__(self,columns,lines,reply=lambda data: None):
