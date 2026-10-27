@@ -25,19 +25,39 @@ def save_font_size(value):
     atomic_json(path, data)
 
 
-def transparent():
+BACKGROUND_MODES=('normal','transparent','black')
+
+
+def background_mode():
     try:
         data = json.loads((config_dir() / 'settings.json').read_text())
-        return data.get('navigator_transparent', True) is not False
+        mode=data.get('navigator_background_mode')
+        if mode in BACKGROUND_MODES: return mode
+        return 'normal' if data.get('navigator_transparent',True) is False else 'transparent'
     except (OSError, ValueError, AttributeError):
-        return True
+        return 'transparent'
+
+
+def transparent(): return background_mode()=='transparent'
+
+
+def save_background_mode(mode):
+    if mode not in BACKGROUND_MODES: raise ValueError('Choose normal, transparent, or black.')
+    path=config_dir()/'settings.json'
+    data=json.loads(path.read_text()) if path.exists() else {}
+    data['navigator_background_mode']=mode
+    data['navigator_transparent']=mode=='transparent'
+    atomic_json(path,data)
+
+
+def cycle_background():
+    mode=BACKGROUND_MODES[(BACKGROUND_MODES.index(background_mode())+1)%len(BACKGROUND_MODES)]
+    save_background_mode(mode)
+    return mode
 
 
 def save_transparent(enabled):
-    path = config_dir() / 'settings.json'
-    data = json.loads(path.read_text()) if path.exists() else {}
-    data['navigator_transparent'] = bool(enabled)
-    atomic_json(path, data)
+    save_background_mode('transparent' if enabled else 'normal')
 
 
 def section_modifier():

@@ -6,7 +6,7 @@ def text(section, modifier='ctrl', title='', context=''):
                    'F12   Show / hide the overlay',
                    'Ctrl+Shift+M   Switch section modifier: Ctrl / Super',
                    'Ctrl+G   Switch section modifier: Ctrl / Super',
-                   'Ctrl+Shift+B   Toggle transparent background']
+                   'Ctrl+Shift+B   Background: normal / transparent / black']
     navigation = ['↑ / ↓ or J / K   Select an item', 'Enter   Open / select',
                   'Esc / Backspace   Back', 'Page Up / Page Down   Scroll items',
                   'Q   Exit the overlay']

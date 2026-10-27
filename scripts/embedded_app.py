@@ -55,6 +55,7 @@ class Host:
         self.shortcut_context={'section':0,'title':'HOME','context':''}
         self.shortcut_dialog=None
         self.transparent=navigator_settings.transparent()
+        self.background_mode=navigator_settings.background_mode()
         self.window=Gtk.Window(title='ROBCO TERMLINK')
         self.window.connect('map',lambda *args: crt_settings.set_host_visible(True))
         self.window.connect('unmap',lambda *args: crt_settings.set_host_visible(False))
@@ -207,15 +208,15 @@ class Host:
         if self.modifier_shortcut(widget,event): return True
         modifiers=Gdk.ModifierType.CONTROL_MASK|Gdk.ModifierType.SHIFT_MASK
         if event.state&modifiers==modifiers and Gdk.keyval_to_lower(event.keyval)==Gdk.KEY_b:
-            enabled=not navigator_settings.transparent()
-            navigator_settings.save_transparent(enabled)
-            self.transparent=enabled
+            mode=navigator_settings.cycle_background()
+            self.background_mode=mode
+            self.transparent=mode=='transparent'
             self.window.queue_draw()
             self.background.queue_draw()
             for child in self.stack.get_children(): child.queue_draw()
-            if enabled and not self.window.get_screen().is_composited():
+            if self.transparent and not self.window.get_screen().is_composited():
                 message='Transparency needs XFCE compositing enabled'
-            else: message='Background: '+('TRANSPARENT' if enabled else 'OPAQUE')
+            else: message='Background: '+mode.upper()
             self.background_notice.set_markup('<span background="#050a06" foreground="#9dff72" weight="bold">  '+message+'  </span>')
             self.background_notice.show()
             if self.background_notice_timer: GLib.source_remove(self.background_notice_timer)
@@ -245,7 +246,10 @@ class Host:
         return True
 
     def draw_background(self,widget,context):
-        if self.transparent and self.window.get_screen().is_composited(): return False
+        if self.background_mode=='transparent' and self.window.get_screen().is_composited(): return False
+        if self.background_mode=='black':
+            context.set_source_rgb(0,0,0); context.paint()
+            return False
         size=widget.get_allocation()
         context.set_source_rgb(5/255,10/255,6/255); context.paint()
         context.save(); context.scale(size.width/self.pixbuf.get_width(),size.height/self.pixbuf.get_height())
@@ -477,10 +481,13 @@ class Host:
     def refresh(self):
         if self.closed: return False
         self.sounds.refresh()
-        transparent=navigator_settings.transparent()
-        if transparent!=self.transparent:
-            self.transparent=transparent
+        mode=navigator_settings.background_mode()
+        if mode!=self.background_mode:
+            self.background_mode=mode
+            self.transparent=mode=='transparent'
             self.window.queue_draw()
+            self.background.queue_draw()
+            for child in self.stack.get_children(): child.queue_draw()
         size=navigator_settings.font_size()
         if size!=self.nav_font_size:
             self.navigator.set_font(Pango.FontDescription('DejaVu Sans Mono '+str(size)))

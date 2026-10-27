@@ -481,7 +481,7 @@ class Navigator:
                 [('CRT overlay: '+status,0),('CRT scan animation: '+animation,1),
                  ('CRT effects and fan always on: '+('On' if crt_settings.always_on() else 'Off'),9),
                  ('Navigator font size: '+str(navigator_settings.font_size())+' pt',3),
-                 ('Transparent background: '+('Enabled' if navigator_settings.transparent() else 'Disabled'),4)],
+                 ('Background: '+navigator_settings.background_mode().title(),4)],
                 [('System volume',7),('Overlay sound volume',2)],
                 [('Section modifier: '+navigator_settings.section_modifier().title(),5)],
                 [('Configure network connections',8)],
@@ -841,7 +841,7 @@ class Navigator:
                 navigator_settings.save_section_modifier('super' if navigator_settings.section_modifier()=='ctrl' else 'ctrl')
                 return
             if index==4:
-                navigator_settings.save_transparent(not navigator_settings.transparent())
+                navigator_settings.cycle_background()
                 return
             if index==3:
                 self.font_settings(); return
