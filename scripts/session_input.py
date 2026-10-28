@@ -9,6 +9,7 @@ SHORTCUTS.update({b'\x1bOP':'previous',b'\x1bOQ':'next',
 SHORTCUTS.update({b'\x1b[5;2~':'scroll_up',b'\x1b[6;2~':'scroll_down',
                   b'\x1bOR':'scroll_up',b'\x1bOS':'scroll_down',
                   b'\x1b[13~':'scroll_up',b'\x1b[14~':'scroll_down'})
+SHORTCUTS.update({b'\x1b[15~':'copy_view',b'\x1b[[E':'copy_view'})
 
 class InputRouter:
     def __init__(self): self.pending=b''; self.pasting=False

@@ -11,7 +11,7 @@ from navigator_tree import Tree
 from navigator_input import read_key
 from text_entry import TextField, draw_box, cursor as input_cursor
 from system_dashboard import SystemDashboard
-from terminal_text import export_text, copy_terminal_text
+from terminal_text import export_text, copy_terminal_text, copy_view
 
 from ssh_manager import Catalog, username, generate_path, remote_directory, scp_args, host_details
 from terminal_sessions import Sessions
@@ -547,10 +547,11 @@ class Navigator:
             elif key==' ':anchor=selected if anchor is None else None
             elif key in ENTER:
                 text=''.join(raw[low:high+1])
-                choice=self.menu('SELECTED HISTORY',['Copy selected lines','Export selected lines','Select all','Back'])
-                if choice==0:self.copy_session_text(text)
-                elif choice==1:self.export_session_text(session,text)
-                elif choice==2:anchor=0;selected=len(raw)-1
+                choice=self.menu('SELECTED HISTORY',['Copy view of selected lines','Copy selected lines','Export selected lines','Select all','Back'])
+                if choice==0:copy_view(self.screen,text,session.label)
+                elif choice==1:self.copy_session_text(text)
+                elif choice==2:self.export_session_text(session,text)
+                elif choice==3:anchor=0;selected=len(raw)-1
 
     def terminal_actions(self,session):
         if not hasattr(session,'text'):
@@ -558,12 +559,13 @@ class Navigator:
             if choice==0:self.attach_session(session)
             elif choice==1:session.close()
             return
-        choice=self.menu(session.label,['Resume','View history / select text','Copy all plain text','Export plain text','Close session','Cancel'])
+        choice=self.menu(session.label,['Resume','View history / select text','Copy view','Copy all plain text','Export plain text','Close session','Cancel'])
         if choice==0:self.attach_session(session)
         elif choice==1:self.history_view(session)
-        elif choice==2:self.copy_session_text(session.text())
-        elif choice==3:self.export_session_text(session,session.text())
-        elif choice==4:session.close()
+        elif choice==2:copy_view(self.screen,session.text(),session.label)
+        elif choice==3:self.copy_session_text(session.text())
+        elif choice==4:self.export_session_text(session,session.text())
+        elif choice==5:session.close()
 
     def open_document(self,path):
         path=Path(path)

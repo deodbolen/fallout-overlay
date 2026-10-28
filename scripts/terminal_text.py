@@ -1,8 +1,17 @@
 """Plain UTF-8 clipboard/export. No markup conversion or entity decoding."""
 import base64
+import curses
 import os
 from pathlib import Path
 import re
+
+
+def write_all(data):
+    packet=memoryview(data)
+    while packet:
+        written=os.write(1,packet)
+        if written<=0:raise OSError('Terminal output stopped.')
+        packet=packet[written:]
 
 
 def plain_text(text):
@@ -33,11 +42,32 @@ def copy_terminal_text(text):
         raise ValueError('Selection exceeds the clipboard request limit. Export it to a text file instead.')
     # Only emitted in response to an explicit user Copy action. The client
     # terminal decides whether remote clipboard requests are permitted.
-    packet=memoryview(b'\x1b]52;c;'+base64.b64encode(data)+b'\x07')
-    while packet:
-        written=os.write(1,packet)
-        if written<=0:raise OSError('Terminal clipboard output stopped.')
-        packet=packet[written:]
+    write_all(b'\x1b]52;c;'+base64.b64encode(data)+b'\x07')
+
+
+def copy_view(screen,text,label='Terminal session'):
+    """Let the client terminal own scrolling/selection of a plain snapshot.
+
+    Absolute-positioned TUI redraws cannot populate a client's native scrollback.
+    Temporarily leave curses and send real lines instead. Never clear the
+    client's existing scrollback or request clipboard permissions.
+    """
+    label=''.join(char for char in label if char.isprintable())
+    text=plain_text(text)
+    curses.def_prog_mode()
+    curses.endwin()
+    try:
+        write_all(('\nCOPY VIEW — '+label+'\n'
+                   'Use your terminal’s normal scrolling and mouse selection.\n'
+                   'Copy the text between BEGIN and END, then press Enter to return.\n'
+                   '----- BEGIN SESSION TEXT -----\n').encode('utf-8'))
+        write_all(text.encode('utf-8'))
+        write_all(('' if text.endswith('\n') else '\n').encode()+b'----- END SESSION TEXT -----\n')
+        try:input('Press Enter after copying to return to your session. ')
+        except (EOFError,KeyboardInterrupt):pass
+    finally:
+        curses.reset_prog_mode()
+        screen.clear();screen.refresh()
 
 
 def vte_text(widget,Gio,Vte):

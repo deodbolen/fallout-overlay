@@ -18,6 +18,7 @@ from pathlib import Path
 from ssh_manager import state_dir, atomic_json
 from terminal_display import TerminalScreen, render, pyte
 from session_input import InputRouter
+from terminal_text import copy_view
 import navigator_settings
 
 class Session:
@@ -149,6 +150,9 @@ class Sessions:
                 session.navigation_status=f'Session {active.index(session)+1}/{len(active)}'
             on_switch(session)
             action,pending=session.attach(screen,router,pending)
+            if action=='copy_view':
+                copy_view(screen,session.text(),session.label)
+                continue
             if action in ('section_previous','section_next'): return action
             if action not in ('next','previous'): return
             active=[s for s in self.items if s.process.poll() is None and s.status in ('running','starting')]

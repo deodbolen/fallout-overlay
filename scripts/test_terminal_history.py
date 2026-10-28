@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from unittest.mock import Mock,patch
 from terminal_display import TerminalScreen,pyte,render,text_slice
-from terminal_text import export_text,plain_text,copy_terminal_text,vte_text
+from terminal_text import export_text,plain_text,copy_terminal_text,vte_text,copy_view
 import navigator_settings
 
 
@@ -20,6 +20,22 @@ def terminal(text,columns=80,lines=25,chunk=None):
 
 
 class HistoryTests(unittest.TestCase):
+    def test_real_report_payload_preserves_all_200_lines_and_japanese_word(self):
+        source=''.join(
+            f'[{n}/200] STATUS=OK | PATH=/var/lib/maelstrom/models/model-{n}/config.json | '
+            'URL=http://127.0.0.1:8443/api/v1/system | '
+            'SPECIAL=**bold**_underscore_@user#tag&value<xml> | '
+            'UNICODE=🚀🔥✅ español 日本語 | DATA='+'ABC123xyz_'*8+'\n'
+            for n in range(1,201))
+        source+='RED TEST\nGREEN TEST\nBLUE TEST\n\nEND OF TEST — ALL 200 LINES GENERATED\n'
+        for columns in (80,160,208,240):
+            with self.subTest(columns=columns):
+                screen,_=terminal(source.replace('\n','\r\n'),columns=columns,lines=55,chunk=37)
+                self.assertEqual(screen.export_text(),source)
+                screen.scroll(10000)
+                self.assertIn('[1/200]',''.join(screen.row_text(row) for row in screen.view_rows()))
+                self.assertNotIn('日本\n語',screen.export_text())
+                self.assertNotIn('F3/F4 History',screen.export_text())
     def test_numbered_100_and_200_lines_survive_and_can_be_scrolled(self):
         for count in (100,200):
             expected=''.join(f'{number:04d}\n' for number in range(1,count+1))
@@ -110,6 +126,27 @@ class HistoryTests(unittest.TestCase):
 
 
 class PlainExportTests(unittest.TestCase):
+    def test_copy_view_prints_one_plain_snapshot_and_restores_tui(self):
+        source=''.join(f'[{i}/200] **bold** http://x 漢字 👩‍💻\n' for i in range(1,201))
+        screen=Mock();packets=[]
+        def write(fd,data):packets.append(bytes(data));return len(data)
+        with patch('terminal_text.curses.def_prog_mode'),patch('terminal_text.curses.endwin'), \
+             patch('terminal_text.curses.reset_prog_mode') as restore, \
+             patch('terminal_text.os.write',side_effect=write),patch('builtins.input',return_value=''):
+            copy_view(screen,source,'session A')
+        output=b''.join(packets).decode()
+        payload=output.split('----- BEGIN SESSION TEXT -----\n',1)[1].split('----- END SESSION TEXT -----',1)[0]
+        self.assertEqual(payload,source)
+        self.assertNotIn('\x1b',output)
+        restore.assert_called_once();screen.clear.assert_called_once();screen.refresh.assert_called_once()
+
+    def test_copy_view_restores_tui_on_error(self):
+        screen=Mock()
+        with patch('terminal_text.curses.def_prog_mode'),patch('terminal_text.curses.endwin'), \
+             patch('terminal_text.curses.reset_prog_mode') as restore, \
+             patch('terminal_text.write_all',side_effect=OSError('write failed')):
+            with self.assertRaises(OSError):copy_view(screen,'text')
+        restore.assert_called_once();screen.refresh.assert_called_once()
     def test_file_is_literal_utf8_private_and_never_overwrites(self):
         source='**bold** http://x <a> &amp; 漢字 👩\u200d💻 e\u0301\n'
         with tempfile.TemporaryDirectory() as folder:

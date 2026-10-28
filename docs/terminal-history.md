@@ -54,6 +54,17 @@ Inside an attached session, F3/F4 or Shift+Page Up/Down scroll retained rows.
 The footer shows when viewing history. Normal Page Up/Down remain available to
 the foreground program. Mac keyboards may require Fn for function keys.
 
+**For ordinary mouse copying on Apple Terminal, press F5 (often Fn+F5).**
+This opens Copy view: the TUI temporarily steps aside and prints one continuous
+plain-text snapshot between BEGIN/END markers. The client terminal owns the
+scrolling, soft wrapping and selection, so you can select across screens and copy
+once instead of repeatedly copying TUI viewports. Press Enter after copying to
+resume the same session. Output capture continues in the background; the snapshot
+is stable. No file is created, existing client scrollback is never cleared, and
+clipboard permissions or custom key mappings are not required. The client
+terminal's own scrollback limit still applies to this view; file export remains
+available for histories larger than that limit.
+
 For selection or export, press Ctrl+] to return to the navigator, select the
 session in Terminal, and press M. Available actions include:
 
@@ -62,6 +73,8 @@ session in Terminal, and press M. Available actions include:
   pan long lines. Space marks the start of a selection; move to its end and press
   Enter for Copy, Export, or Select all. Selection operates on actual text lines,
   not the padded view or bytes of a Unicode character.
+- **Copy view:** the same F5 view, available from the session menu or for a
+  selected range of history lines.
 - **Copy all plain text:** explicitly requests the client terminal's clipboard
   with OSC 52. Some terminal clients, including configurations of Apple Terminal,
   block or do not support remote clipboard requests. The UI reports a request,

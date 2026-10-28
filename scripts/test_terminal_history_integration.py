@@ -32,12 +32,15 @@ class TerminalHistoryIntegrationTests(unittest.TestCase):
                                      stdin=slave,stdout=slave,stderr=slave,env=env)
             os.close(slave)
             screen=TerminalScreen(100,28);stream=pyte.ByteStream(screen)
+            captured=bytearray()
 
             def pump(seconds=.1):
                 deadline=time.monotonic()+seconds
                 while time.monotonic()<deadline:
                     if select.select([master],[],[],.02)[0]:
-                        try:stream.feed(os.read(master,65536))
+                        try:
+                            data=os.read(master,65536)
+                            captured.extend(data);stream.feed(data)
                         except OSError:return
 
             def expect(text):
@@ -53,7 +56,7 @@ class TerminalHistoryIntegrationTests(unittest.TestCase):
             def export_to(path):
                 send(b'\x1d');expect('+ Local terminal')
                 send(b'm');expect('Export plain text')
-                send(b'\x1bOB'*3+b'\r');expect('EXPORT PLAIN TEXT')
+                send(b'\x1bOB'*4+b'\r');expect('EXPORT PLAIN TEXT')
                 send(b'\x15'+str(path).encode()+b'\r')
                 expect('Exported plain UTF-8 text')
                 return path.read_text()
@@ -70,6 +73,15 @@ class TerminalHistoryIntegrationTests(unittest.TestCase):
                 expect('LINE-001')
                 send(b'\x1bOS'*40)
                 expect('LINE-200')
+                start=len(captured)
+                send(b'\x1b[15~')
+                expect('Press Enter after copying')
+                snapshot=bytes(captured[start:]).split(b'----- BEGIN SESSION TEXT -----\r\n',1)[1]
+                snapshot=snapshot.split(b'----- END SESSION TEXT -----',1)[0].decode().replace('\r\n','\n')
+                self.assertEqual(re.findall(r'^LINE-(\d{3}) ',snapshot,re.M),[f'{i:03d}' for i in range(1,201)])
+                self.assertIn('漢字 😀 👩‍💻',snapshot)
+                self.assertNotIn('\x1b',snapshot)
+                send(b'\r');expect('Session 1/1')
                 text=export_to(Path(directory)/'first.txt')
                 numbered=re.findall(r'^LINE-(\d{3}) ',text,re.M)
                 self.assertEqual(numbered,[f'{i:03d}' for i in range(1,201)])

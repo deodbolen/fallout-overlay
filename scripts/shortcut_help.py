@@ -27,6 +27,7 @@ def text(section, modifier='ctrl', title='', context=''):
                                   '+ / −   Adjust the selected font or volume setting'],
         'SESSION': ['Ctrl+]   Return to navigator', 'Ctrl+↑ / ↓   Switch sessions',
                     'SSH TUI: F3 / F4 or Shift+Page Up / Down   Scroll retained history',
+                    'SSH TUI: F5   Copy view with normal terminal scrolling and selection',
                     'Navigator Terminal → M   View/select/copy/export history',
                     'Terminal over SSH: F1 / F2   Previous / next session',
                     'Terminal alternative: Ctrl+O / Ctrl+P   Previous / next session',

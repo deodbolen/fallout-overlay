@@ -12,6 +12,12 @@ Ctrl+], select the session and press M for history selection and plain-text
 copy/export. The desktop terminal context menu also offers full-history copy
 and export. See [terminal history and export](docs/terminal-history.md) for details.
 
+For easy native mouse copying over SSH, press **F5** (**Fn+F5** on many Macs).
+Copy view prints the session's retained output as continuous plain text so your
+terminal can scroll and select it normally. Copy between the BEGIN/END markers,
+then press Enter to resume the TUI. No export file or Terminal configuration is
+needed.
+
 Tested on **Debian 13, XFCE, X11**. Copy the entire project to a permanent directory, then run these commands from a terminal in your logged-in desktop session:
 
 ```sh

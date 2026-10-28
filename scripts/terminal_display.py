@@ -8,7 +8,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parent.parent/'vendor/python'))
 import pyte
 from wcwidth import wcwidth,wcswidth
 
-FOOTER='Ctrl+] Navigator | F1 Previous session | F2 Next session | F3/F4 History'
+FOOTER='F1/F2 Sessions | F3/F4 History | F5 Copy view | Ctrl+] Navigator'
 
 
 def graphemes(text):
