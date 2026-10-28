@@ -5,6 +5,25 @@ from ssh_manager import config_dir, atomic_json
 DEFAULT_SIZE = 16
 MIN_SIZE = 8
 MAX_SIZE = 32
+MIN_SCROLLBACK = 10000
+MAX_SCROLLBACK = 100000
+
+
+def scrollback_lines():
+    try:
+        data=json.loads((config_dir()/'settings.json').read_text())
+        return max(MIN_SCROLLBACK,min(MAX_SCROLLBACK,int(data.get('terminal_scrollback',MIN_SCROLLBACK))))
+    except (OSError,ValueError,TypeError,AttributeError): return MIN_SCROLLBACK
+
+
+def save_scrollback_lines(value):
+    value=int(value)
+    if not MIN_SCROLLBACK<=value<=MAX_SCROLLBACK:
+        raise ValueError('Scrollback must be between 10,000 and 100,000 lines.')
+    path=config_dir()/'settings.json'
+    data=json.loads(path.read_text()) if path.exists() else {}
+    data['terminal_scrollback']=value
+    atomic_json(path,data)
 
 
 def font_size():

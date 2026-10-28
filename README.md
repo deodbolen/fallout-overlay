@@ -6,6 +6,12 @@ A Pip-Boy inspired XFCE desktop: bright green on black, a 36px system panel, and
 
 ## Quick start
 
+Terminal history is retained per session (10,000 lines by default, configurable
+under Display). In an attached SSH TUI session, F3/F4 scroll history. Return with
+Ctrl+], select the session and press M for history selection and plain-text
+copy/export. The desktop terminal context menu also offers full-history copy
+and export. See [terminal history and export](docs/terminal-history.md) for details.
+
 Tested on **Debian 13, XFCE, X11**. Copy the entire project to a permanent directory, then run these commands from a terminal in your logged-in desktop session:
 
 ```sh

@@ -31,6 +31,7 @@ from ssh_manager import atomic_json,state_dir
 from sounds import Sounds
 import navigator_settings
 import crt_settings
+from terminal_text import vte_text,export_text
 from network_discovery import Discovery
 
 NAV_FONT='DejaVu Sans Mono 16'
@@ -156,7 +157,10 @@ class Host:
         terminal.set_cursor_blink_mode(Vte.CursorBlinkMode.ON)
         palette='#09110b;#ff6b6b;#9dff72;#ffe478;#8ab4ff;#eda6ff;#89f5ee;#d7f5d0;#6a8c6b;#ff9393;#b6ffa3;#fff3a1;#b4ceff;#f6c5ff;#b6fff6;#f3fff0'
         terminal.set_colors(color('#b6ffa3'),color('rgba(5,10,6,0)'),[color(c) for c in palette.split(';')])
-        terminal.set_scrollback_lines(10000); terminal.set_audible_bell(False)
+        terminal.set_scrollback_lines(navigator_settings.scrollback_lines()); terminal.set_audible_bell(False)
+        terminal.set_scroll_on_output(False)
+        terminal.set_scroll_on_keystroke(True)
+        terminal.set_rewrap_on_resize(True)
         terminal.set_mouse_autohide(True)
         return terminal
 
@@ -360,6 +364,12 @@ class Host:
         copy.set_sensitive(widget.get_has_selection())
         copy.connect('activate',lambda item: widget.copy_clipboard_format(Vte.Format.TEXT))
         menu.append(copy)
+        copy_all=Gtk.MenuItem(label='Copy all plain text')
+        copy_all.connect('activate',lambda item:self.copy_all_terminal_text(widget))
+        menu.append(copy_all)
+        export=Gtk.MenuItem(label='Export plain text')
+        export.connect('activate',lambda item:self.export_terminal_text(widget))
+        menu.append(export)
         paste=Gtk.MenuItem(label='Paste')
         paste.connect('activate',lambda item: widget.paste_clipboard())
         menu.append(paste)
@@ -368,6 +378,23 @@ class Host:
         menu.append(select)
         menu.show_all(); menu.popup_at_pointer(event)
         return True
+
+    def copy_all_terminal_text(self,widget):
+        text=vte_text(widget,Gio,Vte)
+        Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD).set_text(text,-1)
+
+    def export_terminal_text(self,widget):
+        dialog=Gtk.FileChooserDialog(title='Export plain terminal text',parent=self.window,action=Gtk.FileChooserAction.SAVE)
+        dialog.add_buttons('Cancel',Gtk.ResponseType.CANCEL,'Export',Gtk.ResponseType.OK)
+        dialog.set_current_name('fallout-session.txt')
+        try:
+            if dialog.run()==Gtk.ResponseType.OK:
+                export_text(dialog.get_filename(),vte_text(widget,Gio,Vte))
+        except (OSError,ValueError,GLib.Error) as error:
+            message=Gtk.MessageDialog(transient_for=self.window,modal=True,message_type=Gtk.MessageType.ERROR,
+                                      buttons=Gtk.ButtonsType.CLOSE,text='Could not export terminal text')
+            message.format_secondary_text(str(error));message.run();message.destroy()
+        finally:dialog.destroy()
 
     def keyboard_selection(self,widget,step):
         accessible=widget.get_accessible()
@@ -493,6 +520,9 @@ class Host:
             self.background.queue_draw()
             for child in self.stack.get_children(): child.queue_draw()
         size=navigator_settings.font_size()
+        capacity=navigator_settings.scrollback_lines()
+        for child in self.stack.get_children():
+            if child.get_scrollback_lines()!=capacity:child.set_scrollback_lines(capacity)
         if size!=self.nav_font_size:
             self.navigator.set_font(Pango.FontDescription('DejaVu Sans Mono '+str(size)))
             self.nav_font_size=size

@@ -11,6 +11,7 @@ from navigator_tree import Tree
 from navigator_input import read_key
 from text_entry import TextField, draw_box, cursor as input_cursor
 from system_dashboard import SystemDashboard
+from terminal_text import export_text, copy_terminal_text
 
 from ssh_manager import Catalog, username, generate_path, remote_directory, scp_args, host_details
 from terminal_sessions import Sessions
@@ -485,7 +486,8 @@ class Navigator:
                 [('CRT overlay: '+status,0),('CRT scan animation: '+animation,1),
                  ('CRT effects and fan always on: '+('On' if crt_settings.always_on() else 'Off'),9),
                  ('Navigator font size: '+str(navigator_settings.font_size())+' pt',3),
-                 ('Background: '+navigator_settings.background_mode().title(),4)],
+                 ('Background: '+navigator_settings.background_mode().title(),4),
+                 ('Terminal scrollback: '+str(navigator_settings.scrollback_lines())+' lines',10)],
                 [('System volume',7),('Overlay sound volume',2)],
                 [('Section modifier: '+navigator_settings.section_modifier().title(),5)],
                 [('Configure network connections',8)],
@@ -507,6 +509,61 @@ class Navigator:
         elif choice==1:
             tool_belt.set_favorite(app,not saved)
             self.message=app['name']+(' removed from Tool Belt.' if saved else ' added to Tool Belt.')
+
+    def export_session_text(self,session,text):
+        value=self.text('EXPORT PLAIN TEXT',str(Path.home()/('fallout-session-'+session.id[:8]+'.txt')))
+        if value is not None:
+            path=export_text(value,text)
+            self.message='Exported plain UTF-8 text to '+str(path)
+
+    def copy_session_text(self,text):
+        copy_terminal_text(text)
+        self.message='Plain-text clipboard request sent. If your terminal blocks it, use Export plain text.'
+
+    def history_view(self,session):
+        from terminal_display import text_slice
+        raw=session.text().splitlines(keepends=True)
+        if not raw:
+            self.message='This session has no retained output.'; return
+        selected=max(0,len(raw)-1); anchor=None; horizontal=0
+        while True:
+            low,high=sorted((selected,anchor if anchor is not None else selected))
+            width=max(1,self.screen.getmaxyx()[1]-10)
+            labels=[('*' if anchor is not None and low<=i<=high else ' ')+f'{i+1:6d} '+
+                    text_slice(line.rstrip('\n'),horizontal,width) for i,line in enumerate(raw)]
+            self.draw('HISTORY // '+session.label,labels,selected,
+                      footer='↑↓ SELECT  PAGE UP/DOWN SCROLL  ←→ PAN  SPACE MARK RANGE  ENTER COPY / EXPORT  ESC BACK',
+                      detail=self.message or f'{len(raw)} retained lines; snapshot of this session only.')
+            key=self.menu_key()
+            if key in ('\x1b','q',curses.KEY_BACKSPACE,'\x7f'): return
+            if key==curses.KEY_UP: selected=max(0,selected-1)
+            elif key==curses.KEY_DOWN:selected=min(len(raw)-1,selected+1)
+            elif key==curses.KEY_PPAGE:selected=max(0,selected-max(1,self.screen.getmaxyx()[0]-6))
+            elif key==curses.KEY_NPAGE:selected=min(len(raw)-1,selected+max(1,self.screen.getmaxyx()[0]-6))
+            elif key==curses.KEY_HOME:selected=0
+            elif key==curses.KEY_END:selected=len(raw)-1
+            elif key==curses.KEY_LEFT:horizontal=max(0,horizontal-8)
+            elif key==curses.KEY_RIGHT:horizontal+=8
+            elif key==' ':anchor=selected if anchor is None else None
+            elif key in ENTER:
+                text=''.join(raw[low:high+1])
+                choice=self.menu('SELECTED HISTORY',['Copy selected lines','Export selected lines','Select all','Back'])
+                if choice==0:self.copy_session_text(text)
+                elif choice==1:self.export_session_text(session,text)
+                elif choice==2:anchor=0;selected=len(raw)-1
+
+    def terminal_actions(self,session):
+        if not hasattr(session,'text'):
+            choice=self.menu(session.label,['Resume','Close session','Cancel'])
+            if choice==0:self.attach_session(session)
+            elif choice==1:session.close()
+            return
+        choice=self.menu(session.label,['Resume','View history / select text','Copy all plain text','Export plain text','Close session','Cancel'])
+        if choice==0:self.attach_session(session)
+        elif choice==1:self.history_view(session)
+        elif choice==2:self.copy_session_text(session.text())
+        elif choice==3:self.export_session_text(session,session.text())
+        elif choice==4:session.close()
 
     def open_document(self,path):
         path=Path(path)
@@ -833,6 +890,10 @@ class Navigator:
                 self.sessions.prune()
         elif page.startswith('settings_'):
             index=items[index]
+            if index==10:
+                value=self.text('TERMINAL SCROLLBACK (10,000–100,000 lines)',str(navigator_settings.scrollback_lines()))
+                if value is not None:navigator_settings.save_scrollback_lines(value)
+                return
             if index==9:
                 crt_settings.set_always_on(not crt_settings.always_on()); return
             if index==8:
@@ -935,6 +996,10 @@ class Navigator:
                         self.screen.timeout(-1)
                         try: self.application_actions(items[index])
                         finally: self.screen.timeout(300)
+                    elif key in ('m','M','\x0f') and page=='terminal' and index>0:
+                        self.screen.timeout(-1)
+                        try:self.terminal_actions(items[index-1])
+                        finally:self.screen.timeout(300)
                     elif key in ('h','H') and page=='home': self.tree.hidden=not self.tree.hidden
                     elif key in ('s','S') and page=='home':
                         path,_,directory=items[index]

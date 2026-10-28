@@ -4,6 +4,15 @@ from session_input import InputRouter
 from terminal_sessions import Sessions
 
 class SessionSwitchingTests(unittest.TestCase):
+    def test_pasted_shortcut_bytes_do_not_switch_sessions(self):
+        router=InputRouter();payload=b'\x1b[200~literal\x0f\x10\x1bOP\x1b[201~'
+        forwarded=b''
+        for byte in payload:
+            text,action,remainder=router.feed(bytes([byte]))
+            self.assertIsNone(action);self.assertEqual(remainder,b'')
+            forwarded+=text
+        self.assertEqual(forwarded,payload)
+        self.assertFalse(router.pasting)
     def test_f1_f2_encodings_and_split_packets(self):
         for sequence,action in ((b'\x1bOP','previous'),(b'\x1bOQ','next'),
                                 (b'\x1b[11~','previous'),(b'\x1b[12~','next'),

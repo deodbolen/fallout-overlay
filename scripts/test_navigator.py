@@ -135,14 +135,14 @@ class NavigatorTests(unittest.TestCase):
                 deadline=time.monotonic()+5
                 answers=0
                 while time.monotonic()<deadline:
-                    output=bytes(session.buffer)
+                    output=session.text().encode('utf-8')
                     if answers==0 and b'Enter passphrase' in output:
                         os.write(session.master,b'\n'); answers=1
                     elif answers==1 and b'Enter same passphrase' in output:
                         os.write(session.master,b'\n'); answers=2
                     if b'Key saved.' in output: break
                     time.sleep(.02)
-                self.assertIn(b'Key saved.',session.buffer)
+                self.assertIn('Key saved.',session.text())
                 catalog=Catalog().read()
                 self.assertEqual(catalog['keys'][0]['name'],'test')
                 path=Path(catalog['keys'][0]['path'])
@@ -156,8 +156,8 @@ class NavigatorTests(unittest.TestCase):
             session=Session('command','test',argv=['/bin/sh','-c','printf SESSION_OK'])
             try:
                 deadline=time.monotonic()+5
-                while b'SESSION_OK' not in session.buffer and time.monotonic()<deadline: time.sleep(.02)
-                self.assertIn(b'SESSION_OK',session.buffer)
+                while 'SESSION_OK' not in session.text() and time.monotonic()<deadline: time.sleep(.02)
+                self.assertIn('SESSION_OK',session.text())
                 os.write(session.master,b'\n')
                 session.process.wait(timeout=5)
             finally: session.close()

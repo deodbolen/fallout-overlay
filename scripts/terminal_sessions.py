@@ -18,6 +18,7 @@ from pathlib import Path
 from ssh_manager import state_dir, atomic_json
 from terminal_display import TerminalScreen, render, pyte
 from session_input import InputRouter
+import navigator_settings
 
 class Session:
     def __init__(self,action,label,**details):
@@ -34,8 +35,8 @@ class Session:
             os.setsid(); fcntl.ioctl(0,termios.TIOCSCTTY,0)
         self.process=subprocess.Popen(['/usr/bin/python3',str(Path(__file__).with_name('session.py')),str(self.path)],stdin=slave,stdout=slave,stderr=slave,env=env,preexec_fn=child_setup)
         os.close(slave)
-        self.buffer=bytearray(); self.lock=threading.Lock(); self.attached=False; self.truncated=False
-        self.display=TerminalScreen(size.columns,max(1,size.lines-1),self._reply)
+        self.lock=threading.Lock(); self.attached=False
+        self.display=TerminalScreen(size.columns,max(1,size.lines-1),self._reply,navigator_settings.scrollback_lines())
         self.stream=pyte.ByteStream(self.display)
         self.revision=0
         self.reader=threading.Thread(target=self._read,daemon=True); self.reader.start()
@@ -52,9 +53,11 @@ class Session:
             with self.lock:
                 self.stream.feed(output)
                 self.revision+=1
-                self.buffer.extend(output)
-                if len(self.buffer)>4*1024*1024:
-                    del self.buffer[:len(self.buffer)-4*1024*1024]; self.truncated=True
+
+    def text(self):
+        if self.process.poll() is not None and threading.current_thread() is not self.reader:
+            self.reader.join(timeout=1)
+        with self.lock: return self.display.export_text()
 
 
     @property
@@ -74,6 +77,7 @@ class Session:
             size=os.get_terminal_size(fd)
             fcntl.ioctl(self.master,termios.TIOCSWINSZ,struct.pack('HHHH',max(1,size.lines-1),size.columns,0,0))
             with self.lock:
+                self.display.set_history_limit(navigator_settings.scrollback_lines())
                 self.display.resize(lines=max(1,size.lines-1),columns=size.columns)
                 os.write(sys.stdout.fileno(),b'\x1b[0m\x1b[2J\x1b[H')
                 os.write(sys.stdout.fileno(),render(self.display,size.lines,size.columns,full=True,session_status=getattr(self,'navigation_status','')))
@@ -85,10 +89,16 @@ class Session:
                     pending=b''
                     if not data: break
                     forward,action,remainder=router.feed(data)
-                    if forward: os.write(self.master,forward)
-                    if action: return action,remainder
+                    if forward:
+                        with self.lock: self.display.scroll(-len(self.display.history))
+                        os.write(self.master,forward)
+                    if action in ('scroll_up','scroll_down'):
+                        with self.lock:
+                            self.display.scroll((1 if action=='scroll_up' else -1)*max(1,self.display.lines-1))
+                        pending=remainder
+                    elif action: return action,remainder
                     pending_since=time.monotonic() if router.pending else None
-                elif router.pending and pending_since is not None and time.monotonic()-pending_since>.1:
+                elif router.pending and not router.pasting and pending_since is not None and time.monotonic()-pending_since>.1:
                     os.write(self.master,router.flush()); pending_since=None
                 newsize=os.get_terminal_size(fd)
                 if newsize!=size:
