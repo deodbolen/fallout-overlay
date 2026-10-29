@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Keyboard directory tree for the RobCo drop-down terminal."""
 import curses
+import threading
 from datetime import datetime
 from digital_clock import clock_lines
 import os
@@ -753,12 +754,44 @@ class Navigator:
                 elif choice==3:
                     result=subprocess.run(['gio','trash','--',str(path)],capture_output=True,text=True)
                     if result.returncode: raise ValueError(result.stderr.strip() or 'Could not move to Trash.')
-                elif choice==4: compress_file(path)
+                elif choice==4: self.compress_with_progress(path)
                 completed+=1
                 self.file_selection.discard(path)
             except (OSError,ValueError) as error: errors.append(path.name+': '+str(error))
         self.file_anchor=None
         self.message=str(completed)+' / '+str(len(paths))+' files completed.'+(' '+ '; '.join(errors) if errors else '')
+
+    def compress_with_progress(self,path):
+        result=[]; errors=[]; done=threading.Event()
+        def work():
+            try: result.append(compress_file(path))
+            except BaseException as error: errors.append(error)
+            finally: done.set()
+        worker=threading.Thread(target=work,daemon=True)
+        worker.start()
+        frame=0
+        try:
+            while True:
+                height,width=self.screen.getmaxyx()
+                logo=['VAULT-TEC',
+                      '          ╭───────╮          ',
+                      '  ━━━━━━━━┤   ●   ├━━━━━━━━  ',
+                      '    ━━━━━━┤       ├━━━━━━    ',
+                      '          ╰───────╯          ']
+                spinner='|/-\\'[frame%4]
+                lines=logo+['',spinner+'  COMPRESSING'+'.'*(frame%4+1),'',path.name]
+                self.draw('VAULT-TEC // COMPRESSION',[],detail='Creating '+path.name+'.zip',refresh=False)
+                top=max(3,(height-len(lines))//2)
+                for row,line in enumerate(lines,top):
+                    self.put(row,' '*max(0,(width-len(line))//2)+line,curses.A_BOLD)
+                self.screen.refresh()
+                if done.wait(0.1): break
+                frame+=1
+        finally:
+            # Do not leave a background archive writer behind if the UI fails.
+            worker.join()
+        if errors: raise errors[0]
+        return result[0]
 
     def directory_actions(self,path):
         choice=self.menu('DIRECTORY // '+path.name,
@@ -780,7 +813,7 @@ class Navigator:
                 self.message='Moved to Trash: '+path.name
 
         elif choice==6:
-            archive=compress_file(path)
+            archive=self.compress_with_progress(path)
             self.message='Created '+str(archive)
 
         elif choice==7:
@@ -821,7 +854,7 @@ class Navigator:
                 if result.returncode: raise ValueError(result.stderr.strip() or 'Could not move the file to Trash.')
                 self.message='Moved to Trash: '+path.name
         elif choice==5:
-            archive=compress_file(path); self.message='Created '+archive.name
+            archive=self.compress_with_progress(path); self.message='Created '+archive.name
         elif choice==6:
             self.menu('FILE INFO',file_info(path)+['Close'],detail='Enter or Esc to close.')
         elif choice==7: self.open_document(path)

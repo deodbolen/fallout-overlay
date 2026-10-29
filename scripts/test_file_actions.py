@@ -77,6 +77,18 @@ class FileActionsTests(unittest.TestCase):
         with patch('file_actions.os.link',side_effect=OSError(errno.EXDEV,'cross-device')):
             target=move_file(self.source,self.folder/self.source.name)
         self.assertEqual(target.read_text(),'preserve content'); self.assertFalse(self.source.exists())
+    def test_compression_progress_shows_brand_and_propagates_errors(self):
+        nav=Navigator.__new__(Navigator)
+        nav.screen=Mock(); nav.screen.getmaxyx.return_value=(30,100)
+        nav.draw=Mock(); nav.put=Mock()
+        with patch('browser.compress_file',return_value=self.root/'result.zip'):
+            self.assertEqual(nav.compress_with_progress(self.folder),self.root/'result.zip')
+        rendered=' '.join(call.args[1] for call in nav.put.call_args_list)
+        self.assertIn('VAULT-TEC',rendered)
+        self.assertIn('COMPRESSING',rendered)
+        with patch('browser.compress_file',side_effect=OSError('disk full')):
+            with self.assertRaisesRegex(OSError,'disk full'): nav.compress_with_progress(self.folder)
+
     def test_rename_directory_preserves_contents_and_refuses_existing_target(self):
         (self.folder/'child').write_text('keep')
         existing=self.root/'existing'; existing.mkdir()
@@ -104,7 +116,7 @@ class FileActionsTests(unittest.TestCase):
 
     def test_directory_compress_menu(self):
         nav=Navigator.__new__(Navigator); nav.menu=Mock(return_value=6)
-        with patch('browser.compress_file',return_value=self.root/'destination.zip') as compress:
+        with patch.object(nav,'compress_with_progress',return_value=self.root/'destination.zip',create=True) as compress:
             nav.directory_actions(self.folder)
             compress.assert_called_once_with(self.folder)
         self.assertIn('destination.zip',nav.message)
