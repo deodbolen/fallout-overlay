@@ -342,6 +342,8 @@ class Host:
         if event.keyval in (Gdk.KEY_F1,Gdk.KEY_F2) and not event.state&Gtk.accelerator_get_default_mod_mask():
             widget.feed_child(b'\x1bOP' if event.keyval==Gdk.KEY_F1 else b'\x1bOQ'); return True
         modifiers=Gdk.ModifierType.CONTROL_MASK|Gdk.ModifierType.MOD1_MASK|Gdk.ModifierType.SUPER_MASK
+        if event.state&Gdk.ModifierType.SHIFT_MASK and not event.state&modifiers and event.keyval in (Gdk.KEY_Up,Gdk.KEY_Down):
+            widget.feed_child(b'\x1b[1;2A' if event.keyval==Gdk.KEY_Up else b'\x1b[1;2B'); return True
         if event.keyval in (Gdk.KEY_Left,Gdk.KEY_Right) and event.state&modifiers:
             chosen=Gdk.ModifierType.SUPER_MASK if navigator_settings.section_modifier()=='super' else Gdk.ModifierType.CONTROL_MASK
             if event.state&modifiers==chosen and not event.state&Gdk.ModifierType.SHIFT_MASK:

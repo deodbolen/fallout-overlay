@@ -52,6 +52,8 @@ class Navigator:
         self.data_trees={'home':self.tree,'root':Tree(Path('/'))}
         self.data_trees['root'].expanded.add(Path('/'))
         self.data_selections={}
+        self.file_selection=set()
+        self.file_anchor=None
         self.catalog=Catalog()
         if os.environ.get('FALLOUT_EMBEDDED_SOCKET'):
             from embedded_client import Sessions as EmbeddedSessions
@@ -356,6 +358,7 @@ class Navigator:
 
     def switch_data_page(self,key):
         if self.sections[self.section]!='DATA' or key not in (curses.KEY_LEFT,curses.KEY_RIGHT): return False
+        self.file_selection.clear(); self.file_anchor=None
         self.data_selections[self.data_index]=self.selected.get('home',0)
         self.data_index=max(0,min(len(self.data_pages())-1,self.data_index+(1 if key==curses.KEY_RIGHT else -1)))
         self.selected['home']=self.data_selections.get(self.data_index,0)
@@ -463,7 +466,7 @@ class Navigator:
             labels=[]
             for path,depth,directory in rows:
                 marker=('[-]' if path in self.tree.expanded else '[+]') if directory else ' · '
-                labels.append('  '*min(depth,20)+marker+' '+(str(path) if path==self.tree.root else path.name+('/' if directory else '')))
+                labels.append(('[*] ' if path in self.file_selection else '    ')+ '  '*min(depth,20)+marker+' '+(str(path) if path==self.tree.root else path.name+('/' if directory else '')))
             return 'home',title,labels,rows
         if self.sections[self.section]=='SSH':
             data=self.catalog.read()
@@ -679,9 +682,12 @@ class Navigator:
                 else: return
 
     def scp_file(self,path):
+        paths=path if isinstance(path,list) else [path]
+        path=paths[0]
+        label=path.name if len(paths)==1 else str(len(paths))+' files'
         user=username({}); address=''; directory='~/'; index=0
         while True:
-            self.draw('SCP // '+path.name,['User: '+user,'Host: '+(address or '(enter hostname or IP)'),
+            self.draw('SCP // '+label,['User: '+user,'Host: '+(address or '(enter hostname or IP)'),
                       'Path: '+directory,'Send','Cancel'],index,
                       footer='↑↓ SELECT  ENTER EDIT / SELECT  ESC CANCEL',
                       detail=self.message or 'Copies the file. An existing remote file with the same name will be replaced.')
@@ -703,12 +709,56 @@ class Navigator:
                     keyfile=next((item for item in catalog['keys'] if item['id']==host['key']),None)
                     if host['key'] and keyfile is None:
                         self.message='The saved SSH key is missing. Edit the host in SSH settings.'; continue
-                    try: argv=scp_args(path,host,directory,keyfile)
+                    try:
+                        commands=[scp_args(source,host,directory,keyfile) for source in paths]
+                        argv=commands[0][:-2]+[command[-2] for command in commands]+[commands[0][-1]]
                     except (OSError,ValueError) as error:
                         self.message=str(error); continue
-                    self.launch('command','SCP: '+path.name+' → '+address,argv=argv)
+                    self.launch('command','SCP: '+label+' → '+address,argv=argv)
                     return
                 else: return
+
+    def select_file_range(self,items,index,step):
+        if self.file_anchor is None: self.file_anchor=index
+        target=max(0,min(len(items)-1,index+step))
+        low,high=sorted((self.file_anchor,target))
+        self.file_selection={path for path,_,directory in items[low:high+1] if not directory}
+        self.selected['home']=target
+
+    def batch_file_actions(self,paths):
+        paths=[source_file(path) for path in paths]
+        remote=any(identity not in ('home','root') and tree is self.tree for identity,tree in self.data_trees.items())
+        actions=['Copy','Move','Download' if remote else 'SCP','Delete','Compress','File info','Cancel']
+        choice=self.menu(str(len(paths))+' FILES',actions,detail=', '.join(path.name for path in paths))
+        if choice is None or choice==6: return
+        if choice==2 and not remote:
+            self.scp_file(paths); return
+        targets=[]
+        if choice in (0,1):
+            folder=self.text('DESTINATION DIRECTORY',str(Path.home())+'/',directory_base=paths[0].parent)
+            if folder is None: return
+            targets=[destination(path,folder) for path in paths]
+            if len(set(targets))!=len(targets) or any(target.exists() or target.is_symlink() for target in targets):
+                raise ValueError('Destination names conflict or already exist. No files changed.')
+        if choice==3 and self.menu('DELETE '+str(len(paths))+' FILES',['Move all to Trash','Cancel'])!=0: return
+        if choice==5:
+            self.menu('FILE INFO',[line for path in paths for line in [str(path),*file_info(path),'']]+['Close'])
+            return
+        completed=0; errors=[]
+        for i,path in enumerate(paths):
+            try:
+                if choice==0: copy_file(path,targets[i])
+                elif choice==1: move_file(path,targets[i])
+                elif choice==2: download_file(path)
+                elif choice==3:
+                    result=subprocess.run(['gio','trash','--',str(path)],capture_output=True,text=True)
+                    if result.returncode: raise ValueError(result.stderr.strip() or 'Could not move to Trash.')
+                elif choice==4: compress_file(path)
+                completed+=1
+                self.file_selection.discard(path)
+            except (OSError,ValueError) as error: errors.append(path.name+': '+str(error))
+        self.file_anchor=None
+        self.message=str(completed)+' / '+str(len(paths))+' files completed.'+(' '+ '; '.join(errors) if errors else '')
 
     def file_actions(self,path):
         source_file(path)
@@ -956,6 +1006,10 @@ class Navigator:
                     except curses.error: continue
                     self.message=''
                     self.navigation_sound(key)
+                    if page=='home' and key in (curses.KEY_UP,curses.KEY_DOWN,curses.KEY_NPAGE,curses.KEY_PPAGE,'j','k',*ENTER):
+                        self.file_selection.clear(); self.file_anchor=None
+                    if page=='home' and key=='\x1b' and self.file_selection:
+                        self.file_selection.clear(); self.file_anchor=None; continue
                     if self.switch_section(key): pass
                     elif self.modifier_key(key): pass
                     elif key=='\t' and not os.environ.get('FALLOUT_EMBEDDED_SOCKET'): self.terminal_help()
@@ -964,6 +1018,8 @@ class Navigator:
                     elif self.switch_inventory_page(key): pass
                     elif self.switch_settings_page(key): pass
                     elif self.switch_home_page(key): pass
+                    elif page=='home' and key in ('select_up','select_down',curses.KEY_SR,curses.KEY_SF):
+                        self.select_file_range(items,index,-1 if key in ('select_up',curses.KEY_SR) else 1)
                     elif key in (curses.KEY_DOWN,'j'): self.selected[page]=min(len(labels)-1,index+1)
                     elif key in (curses.KEY_UP,'k'): self.selected[page]=max(0,index-1)
                     elif key==curses.KEY_NPAGE: self.selected[page]=min(len(labels)-1,index+max(1,self.screen.getmaxyx()[0]-6))
@@ -990,9 +1046,12 @@ class Navigator:
                         path,_,directory=items[index]
                         if directory: self.launch('shell','Local: '+path.name,cwd=str(path))
                         else: self.open_document(path)
-                    elif key in ('m','M','\x0f') and page=='home' and not items[index][2]:
+                    elif key in ('m','M','\x0f') and page=='home' and (self.file_selection or not items[index][2]):
                         self.screen.timeout(-1)
-                        try: self.file_actions(items[index][0])
+                        try:
+                            paths=[row[0] for row in items if row[0] in self.file_selection]
+                            if len(paths)>1: self.batch_file_actions(paths)
+                            else: self.file_actions(paths[0] if paths else items[index][0])
                         finally: self.screen.timeout(300)
                     elif key in ('m','M','\x0f') and page in ('apps','toolbelt') and items:
                         self.screen.timeout(-1)

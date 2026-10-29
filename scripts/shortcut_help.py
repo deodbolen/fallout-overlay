@@ -15,7 +15,7 @@ def text(section, modifier='ctrl', title='', context=''):
                  '↑ / ↓ / Page Up / Page Down   Scroll system statistics',
                  'P   Open the power menu', 'Tab   Focus the power button',
                  'Space / Enter   Activate the focused button'],
-        'DATA': navigation + ['← / →   Change Data page', 'Ctrl+M or M   File menu',
+        'DATA': navigation + ['← / →   Change Data page', 'Ctrl+M or M   File menu', 'Shift+↑ / ↓   Select a range of files; M acts on selection', 'Esc   Clear file selection',
                               'Enter in Trash   Restore / permanently delete; Empty Trash clears all items',
                               'Ctrl+N   New file / directory', 'O   Open file or directory shell',
                               'S   Open a shell here', 'H   Show / hide hidden files'],
