@@ -27,7 +27,7 @@ import time
 from network_discovery import discovered_servers
 from urllib.parse import urlsplit
 from section_transition import animate as animate_section
-from file_actions import source_file, new_name, destination, copy_file, move_file, compress_file, file_info, create_entry, download_file
+from file_actions import rename_directory, source_file, new_name, destination, copy_file, move_file, compress_file, file_info, create_entry, download_file
 import configparser
 import shutil
 import shlex
@@ -762,7 +762,7 @@ class Navigator:
 
     def directory_actions(self,path):
         choice=self.menu('DIRECTORY // '+path.name,
-                         ['Open','Open terminal here','New file / directory','Directory info','Open GUI','Delete','Cancel'],
+                         ['Open','Open terminal here','New file / directory','Directory info','Open GUI','Delete','Compress','Rename','Cancel'],
                          detail=str(path))
         if choice==0:
             self.tree.expanded.add(path)
@@ -778,6 +778,22 @@ class Navigator:
                 if result.returncode: raise ValueError(result.stderr.strip() or 'Could not move directory to Trash.')
                 self.tree.expanded.discard(path)
                 self.message='Moved to Trash: '+path.name
+
+        elif choice==6:
+            archive=compress_file(path)
+            self.message='Created '+str(archive)
+
+        elif choice==7:
+            if path==self.tree.root:
+                self.message='The Data page root cannot be renamed.'; return
+            name=self.text('RENAME DIRECTORY // '+path.name,path.name)
+            if name is None: return
+            target=rename_directory(path,name)
+            self.tree.expanded={target/item.relative_to(path) if item==path or path in item.parents else item
+                                for item in self.tree.expanded}
+            rows=self.tree.rows()
+            self.selected['home']=next((i for i,row in enumerate(rows) if row[0]==target),0)
+            self.message='Renamed to '+target.name
 
     def file_actions(self,path):
         if path.is_dir(): return self.directory_actions(path)

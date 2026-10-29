@@ -28,6 +28,22 @@ def new_name(source,name):
     return result
 
 
+def rename_directory(source,name):
+    source=Path(source)
+    if not source.is_dir() or source.is_symlink(): raise ValueError('Select a directory.')
+    if not name or name in ('.','..') or '/' in name or any(ord(c)<32 for c in name):
+        raise ValueError('Enter a folder name without a directory path.')
+    target=source.with_name(name)
+    if target==source: raise ValueError('The folder name has not changed.')
+    # Reserve the destination exclusively; never replace an existing directory.
+    target.mkdir()
+    try: source.rename(target)
+    except BaseException:
+        target.rmdir()
+        raise
+    return target
+
+
 def destination(source,directory):
     source=source_file(source)
     if not directory.strip(): raise ValueError('Enter a destination directory.')
@@ -102,17 +118,30 @@ def move_file(source,target):
 
 
 def compress_file(source):
-    source=source_file(source); archive=source.with_name(source.name+'.zip')
+    source=Path(source)
+    if not source.is_dir() or source.is_symlink(): source_file(source)
+    archive=source.with_name(source.name+'.zip')
     created=False
     try:
         with zipfile.ZipFile(archive,'x',compression=zipfile.ZIP_DEFLATED) as output:
             created=True
-            if source.is_symlink():
-                info=zipfile.ZipInfo(source.name)
-                info.create_system=3
-                info.external_attr=(stat.S_IFLNK | 0o777)<<16
-                output.writestr(info,os.readlink(source))
-            else: output.write(source,arcname=source.name)
+
+            def add(path):
+                name=str(path.relative_to(source.parent))
+                if path.is_symlink():
+                    info=zipfile.ZipInfo(name)
+                    info.create_system=3
+                    info.external_attr=(stat.S_IFLNK | 0o777)<<16
+                    output.writestr(info,os.readlink(path))
+                elif path.is_dir():
+                    output.write(path,arcname=name)
+                    # Do not follow directory symlinks outside the selected tree.
+                    for child in sorted(path.iterdir()): add(child)
+                else:
+                    source_file(path)
+                    output.write(path,arcname=name)
+
+            add(source)
     except BaseException:
         if created: archive.unlink(missing_ok=True)
         raise

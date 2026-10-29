@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 import zipfile
-from file_actions import copy_file, move_file, destination, new_name, compress_file, file_info, create_entry, download_file
+from file_actions import rename_directory, copy_file, move_file, destination, new_name, compress_file, file_info, create_entry, download_file
 from browser import Navigator
 from unittest.mock import Mock
 
@@ -77,6 +77,38 @@ class FileActionsTests(unittest.TestCase):
         with patch('file_actions.os.link',side_effect=OSError(errno.EXDEV,'cross-device')):
             target=move_file(self.source,self.folder/self.source.name)
         self.assertEqual(target.read_text(),'preserve content'); self.assertFalse(self.source.exists())
+    def test_rename_directory_preserves_contents_and_refuses_existing_target(self):
+        (self.folder/'child').write_text('keep')
+        existing=self.root/'existing'; existing.mkdir()
+        with self.assertRaises(FileExistsError): rename_directory(self.folder,'existing')
+        self.assertTrue(existing.is_dir())
+        for name in ('../bad','','.','destination'):
+            with self.assertRaises(ValueError): rename_directory(self.folder,name)
+        renamed=rename_directory(self.folder,'new folder')
+        self.assertEqual((renamed/'child').read_text(),'keep')
+        self.assertFalse(self.folder.exists())
+
+    def test_compress_directory_contents_empty_folders_and_symlinks(self):
+        tree=self.root/'project'; tree.mkdir()
+        (tree/'empty').mkdir(); (tree/'.hidden').write_text('hidden')
+        (tree/'nested').mkdir(); (tree/'nested'/'file.txt').write_text('contents')
+        (tree/'outside').symlink_to(self.folder,target_is_directory=True)
+        archive=compress_file(tree)
+        with zipfile.ZipFile(archive) as output:
+            self.assertIn('project/empty/',output.namelist())
+            self.assertEqual(output.read('project/nested/file.txt'),b'contents')
+            self.assertEqual(output.read('project/.hidden'),b'hidden')
+            self.assertEqual(output.read('project/outside'),str(self.folder).encode())
+            self.assertFalse(any(name.startswith('project/outside/') for name in output.namelist()))
+        with self.assertRaises(FileExistsError): compress_file(tree)
+
+    def test_directory_compress_menu(self):
+        nav=Navigator.__new__(Navigator); nav.menu=Mock(return_value=6)
+        with patch('browser.compress_file',return_value=self.root/'destination.zip') as compress:
+            nav.directory_actions(self.folder)
+            compress.assert_called_once_with(self.folder)
+        self.assertIn('destination.zip',nav.message)
+
     def test_compress_does_not_replace_archive(self):
         archive=compress_file(self.source)
         with zipfile.ZipFile(archive) as zipped:
