@@ -19,6 +19,20 @@ class FileSelectionTests(unittest.TestCase):
         self.assertEqual(nav.file_selection,{Path('/a')})
         self.assertEqual(nav.selected['home'],1)
 
+    def test_directory_menu_dispatch(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)
+            nav=Navigator.__new__(Navigator)
+            nav.directory_actions=Mock()
+            nav.file_actions(path)
+            nav.directory_actions.assert_called_once_with(path)
+
+    def test_directory_menu_opens_terminal(self):
+        nav=Navigator.__new__(Navigator)
+        nav.menu=Mock(return_value=1); nav.launch=Mock()
+        nav.directory_actions(Path('/tmp/example'))
+        nav.launch.assert_called_once_with('shell','Local: example',cwd='/tmp/example')
+
     def test_shift_sequences(self):
         for suffix,expected in [('A','select_up'),('B','select_down')]:
             screen=Mock()

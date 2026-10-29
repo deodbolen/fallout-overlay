@@ -760,7 +760,27 @@ class Navigator:
         self.file_anchor=None
         self.message=str(completed)+' / '+str(len(paths))+' files completed.'+(' '+ '; '.join(errors) if errors else '')
 
+    def directory_actions(self,path):
+        choice=self.menu('DIRECTORY // '+path.name,
+                         ['Open','Open terminal here','New file / directory','Directory info','Open GUI','Delete','Cancel'],
+                         detail=str(path))
+        if choice==0:
+            self.tree.expanded.add(path)
+        elif choice==1: self.launch('shell','Local: '+path.name,cwd=str(path))
+        elif choice==2: self.new_entry(path)
+        elif choice==3: self.menu('DIRECTORY INFO',file_info(path)+['Close'])
+        elif choice==4: self.open_gui(path)
+        elif choice==5:
+            if path==self.tree.root:
+                self.message='The Data page root cannot be deleted.'; return
+            if self.menu('DELETE DIRECTORY // '+path.name,['Move to Trash','Cancel'],detail='Includes everything inside '+str(path))==0:
+                result=subprocess.run(['gio','trash','--',str(path)],capture_output=True,text=True)
+                if result.returncode: raise ValueError(result.stderr.strip() or 'Could not move directory to Trash.')
+                self.tree.expanded.discard(path)
+                self.message='Moved to Trash: '+path.name
+
     def file_actions(self,path):
+        if path.is_dir(): return self.directory_actions(path)
         source_file(path)
         remote=any(identity not in ('home','root') and tree is self.tree for identity,tree in getattr(self,'data_trees',{}).items())
         transfer='Download' if remote else 'SCP'
@@ -1046,7 +1066,7 @@ class Navigator:
                         path,_,directory=items[index]
                         if directory: self.launch('shell','Local: '+path.name,cwd=str(path))
                         else: self.open_document(path)
-                    elif key in ('m','M','\x0f') and page=='home' and (self.file_selection or not items[index][2]):
+                    elif key in ('m','M','\x0f') and page=='home':
                         self.screen.timeout(-1)
                         try:
                             paths=[row[0] for row in items if row[0] in self.file_selection]
