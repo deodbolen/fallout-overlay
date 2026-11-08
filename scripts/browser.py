@@ -507,6 +507,12 @@ class Navigator:
         return 'apps',title,[a['name'] for a in self.apps] or ['No applications'],self.apps
 
     def application_actions(self,app):
+        if app.get('builtin')=='yes-man':
+            from yes_man_ui import run, configure
+            choice=self.menu('YES MAN',['Launch','Configure LLM server','Cancel'])
+            if choice==0: run(self)
+            elif choice==1: configure(self)
+            return
         saved=tool_belt.contains(app)
         choice=self.menu(app['name'],['Launch','Remove from Tool Belt' if saved else 'Add to Tool Belt','Cancel'])
         if choice==0: self.activate('apps',0,[app])
@@ -1042,6 +1048,9 @@ class Navigator:
                 self.message=label+' '+('enabled.' if choice==0 else 'disabled.')
         elif page in ('apps','toolbelt') and items:
             app=items[index]
+            if app.get('builtin')=='yes-man':
+                from yes_man_ui import run
+                run(self); return
             if app['terminal']:
                 args=[]
                 for token in shlex.split(app['exec']):

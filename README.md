@@ -124,3 +124,23 @@ The two GUI integration scripts are skipped by unit-test discovery. Run them dir
 | `vendor/` | Bundled fallback libraries and license notices |
 
 Metrics refresh every two seconds; screen width is checked at most once a minute. A resolution change can take up to a minute to switch between compact and full panel labels.
+
+### Yes Man
+
+Yes Man is built into **INV → Tool Belt** in both the desktop navigator and SSH TUI.
+Choose **Configure LLM server** (also available from its M menu), select **OpenAI
+compatible** or **Ollama**, enter the server address and model name, and optionally
+set an API key. OpenAI-compatible addresses can include `/v1`; Ollama addresses
+can include `/api`. Examples: `http://192.168.1.20:1234/v1` or
+`http://192.168.1.20:11434`. Localhost means the machine running Fallout, including
+when you use Fallout over SSH. Save, then open Chat and press **N** to write.
+Use the arrows or Page Up/Down to read replies; Escape returns to the menu.
+
+Configuration is saved per user in `yes-man.json` in Fallout's configuration
+folder with owner-only file permissions. API keys are masked during entry.
+Conversation history remains in memory until Fallout exits or New conversation
+is selected. Messages and that conversation's history are sent to the configured
+server. Yes Man is a chat assistant; it does not execute commands or read files.
+
+The adapters use [Ollama's chat API](https://docs.ollama.com/api/chat) and the
+[OpenAI-compatible chat completions format](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create).

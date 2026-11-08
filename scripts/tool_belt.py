@@ -31,4 +31,5 @@ def set_favorite(app,enabled):
 
 def applications(installed):
     by_id={identifier(app):app for app in installed}
-    return [by_id[identity] for identity in favorites() if identity in by_id]
+    from yes_man import APP
+    return [dict(APP)]+[by_id[identity] for identity in favorites() if identity in by_id]
