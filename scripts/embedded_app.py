@@ -270,13 +270,39 @@ class Host:
         available_h=max(1,size.height-8*cell_h)
         available_w=max(1,size.width*.30)
         image=self.yes_man_pixbuf
-        factor=min(available_w/image.get_width(),available_h/image.get_height())
+        # A deep bezel and bowed screen edges give the portrait a bubble-TV shape.
+        bezel=max(3,min(14,available_w*.045))
+        factor=min(max(1,available_w-2*bezel)/image.get_width(),
+                   max(1,available_h-2*bezel)/image.get_height())
         width=image.get_width()*factor; height=image.get_height()*factor
+        outer_w=width+2*bezel; outer_h=height+2*bezel
         context.save()
-        context.translate(size.width-width-16,3*cell_h+(available_h-height)/2)
-        context.scale(factor,factor)
-        Gdk.cairo_set_source_pixbuf(context,image,0,0)
-        context.paint(); context.restore()
+        context.translate(size.width-outer_w-16,3*cell_h+(available_h-outer_h)/2)
+
+        def bubble(x,y,w,h):
+            context.new_path()
+            context.move_to(x+.22*w,y+.025*h)
+            context.curve_to(x+.38*w,y-.008*h,x+.62*w,y-.008*h,x+.78*w,y+.025*h)
+            context.curve_to(x+.96*w,y+.045*h,x+.98*w,y+.08*h,x+.99*w,y+.26*h)
+            context.curve_to(x+1.015*w,y+.42*h,x+1.015*w,y+.58*h,x+.99*w,y+.74*h)
+            context.curve_to(x+.98*w,y+.92*h,x+.96*w,y+.955*h,x+.78*w,y+.975*h)
+            context.curve_to(x+.62*w,y+1.008*h,x+.38*w,y+1.008*h,x+.22*w,y+.975*h)
+            context.curve_to(x+.04*w,y+.955*h,x+.02*w,y+.92*h,x+.01*w,y+.74*h)
+            context.curve_to(x-.015*w,y+.58*h,x-.015*w,y+.42*h,x+.01*w,y+.26*h)
+            context.curve_to(x+.02*w,y+.08*h,x+.04*w,y+.045*h,x+.22*w,y+.025*h)
+            context.close_path()
+
+        bubble(0,0,outer_w,outer_h)
+        context.set_source_rgb(.035,.09,.045); context.fill_preserve()
+        context.set_source_rgba(.61,1,.45,.85); context.set_line_width(2); context.stroke()
+        context.save()
+        bubble(bezel,bezel,width,height); context.clip()
+        context.translate(bezel,bezel); context.scale(factor,factor)
+        Gdk.cairo_set_source_pixbuf(context,image,0,0); context.paint()
+        context.restore()
+        bubble(bezel,bezel,width,height)
+        context.set_source_rgba(.35,.65,.28,.9); context.set_line_width(2); context.stroke()
+        context.restore()
         return False
 
     def draw_clock(self,widget,context):
