@@ -99,10 +99,13 @@ class Host:
         css=Gtk.CssProvider()
         css.load_from_data(b'window { background: transparent; color: #b6ffa3; } vte-terminal { background: transparent; } label { color: #b6ffa3; } #session-reminder { font-family: \"DejaVu Sans Mono\"; font-size: 11pt; }')
         Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(),css,Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        self.yes_man_visible=False
+        self.yes_man_pixbuf=GdkPixbuf.Pixbuf.new_from_file(str(ROOT/'assets/YesManGreen.png'))
         self.clock_value=''
         self.nav_font_size=navigator_settings.font_size()
         self.navigator=self.terminal('DejaVu Sans Mono '+str(self.nav_font_size))
         self.navigator.connect_after('draw',self.draw_clock)
+        self.navigator.connect_after('draw',self.draw_yes_man)
         self.navigator.connect('key-press-event',self.nav_keys)
         self.navigator.connect('child-exited',self.nav_exited)
         self.stack.add_named(self.navigator,'navigator')
@@ -258,6 +261,22 @@ class Host:
         context.set_source_rgb(5/255,10/255,6/255); context.paint()
         context.save(); context.scale(size.width/self.pixbuf.get_width(),size.height/self.pixbuf.get_height())
         Gdk.cairo_set_source_pixbuf(context,self.pixbuf,0,0); context.paint(); context.restore()
+        return False
+
+    def draw_yes_man(self,widget,context):
+        if not self.yes_man_visible: return False
+        size=widget.get_allocation()
+        cell_h=max(1,widget.get_char_height())
+        available_h=max(1,size.height-8*cell_h)
+        available_w=max(1,size.width*.30)
+        image=self.yes_man_pixbuf
+        factor=min(available_w/image.get_width(),available_h/image.get_height())
+        width=image.get_width()*factor; height=image.get_height()*factor
+        context.save()
+        context.translate(size.width-width-16,3*cell_h+(available_h-height)/2)
+        context.scale(factor,factor)
+        Gdk.cairo_set_source_pixbuf(context,image,0,0)
+        context.paint(); context.restore()
         return False
 
     def draw_clock(self,widget,context):
@@ -603,6 +622,9 @@ class Host:
                             reply({})
                         elif command=='browse_network': reply(self.discovery.browse(request.get('uri','network:///'),request.get('refresh',False)))
                         elif command=='mount_server': self.mount_server(request['uri'],reply)
+                        elif command=='yes_man_portrait':
+                            self.yes_man_visible=bool(request.get('visible',False))
+                            self.navigator.queue_draw(); reply({})
                         elif command=='clock':
                             self.clock_value=str(request.get('value',''))[:5]
                             self.update_power_button()

@@ -1,5 +1,6 @@
 """Keyboard-operated Yes Man chat for the desktop navigator and SSH TUI."""
 import curses
+import os
 import threading
 import textwrap
 import yes_man
@@ -83,17 +84,27 @@ def run(nav):
         else: chat(nav)
 
 
+def portrait(visible):
+    if not os.environ.get('FALLOUT_EMBEDDED_SOCKET'): return False
+    from embedded_client import request
+    request('yes_man_portrait',visible=visible)
+    return True
+
+
 def chat(nav):
     config=yes_man.settings()
     try: yes_man.validate(config)
     except ValueError: configure(nav); return
     messages=nav.yes_man_messages; offset=0; status='N: New message   ↑↓: Scroll   Esc: Back'
     task=None; result=[]; errors=[]; done=threading.Event()
+    native=portrait(True)
     nav.screen.timeout(100)
     try:
         while True:
             width=nav.screen.getmaxyx()[1]; visible=max(1,nav.screen.getmaxyx()[0]-6)
+            if native: width=max(10,int(width*.66))
             lines=['          YES MAN', '        .----------.', '        |  ^    ^  |', '        |   \\__/   |', '        \'----------\'','']
+            if native: lines=[]
             for message in messages:
                 lines.append('YOU' if message['role']=='user' else 'YES MAN')
                 for line in message['content'].splitlines():
@@ -114,8 +125,11 @@ def chat(nav):
             elif key in (curses.KEY_DOWN,curses.KEY_NPAGE): offset+=visible if key==curses.KEY_NPAGE else 1
             elif key in ('n','N','\n','\r') and task is None:
                 nav.screen.timeout(-1)
+                portrait(False)
                 try: value=nav.text('MESSAGE TO YES MAN')
-                finally: nav.screen.timeout(100)
+                finally:
+                    portrait(True)
+                    nav.screen.timeout(100)
                 if not value: continue
                 pending={'role':'user','content':value}; result=[]; errors=[]; done=threading.Event()
                 snapshot=list(messages)+[pending]
@@ -126,4 +140,6 @@ def chat(nav):
                     finally: done.set()
                 task=threading.Thread(target=work,daemon=True); task.start()
                 status='Yes Man is thinking…  Esc: Back'
-    finally: nav.screen.timeout(-1)
+    finally:
+        portrait(False)
+        nav.screen.timeout(-1)
