@@ -1080,7 +1080,7 @@ class Navigator:
                         animate_section(self.screen,redraw)
                     else:
                         redraw()
-                    try: key=read_key(self.screen)
+                    try: key=read_key(self.screen,300)
                     except curses.error: continue
                     self.message=''
                     self.navigation_sound(key)

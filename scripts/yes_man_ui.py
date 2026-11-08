@@ -56,7 +56,6 @@ def test_connection(nav,config):
         except Exception as error: errors.append(error)
         finally: done.set()
     threading.Thread(target=work,daemon=True).start()
-    delay=nav.screen.getdelay()
     nav.screen.timeout(100)
     frame=0
     try:
@@ -65,12 +64,12 @@ def test_connection(nav,config):
                      ['Checking server and model'+'.'*(frame%3+1),config['url'],config['model']],
                      detail='Sending a short test message. Esc returns to settings.',highlight=False)
             frame+=1
-            try: key=read_key(nav.screen)
+            try: key=read_key(nav.screen,100)
             except curses.error: continue
             if key=='\x1b':
                 nav.message='Connection test dismissed.'; return
         nav.message=('Connection failed: '+str(errors[0])) if errors else 'Connection successful! Server and model replied.'
-    finally: nav.screen.timeout(delay)
+    finally: nav.screen.timeout(-1)
 
 
 def run(nav):
@@ -108,7 +107,7 @@ def chat(nav):
                 else:
                     messages.extend([pending,{'role':'assistant','content':result[0]}])
                     offset=10**9; status='N: New message   ↑↓: Scroll   Esc: Back'
-            try: key=read_key(nav.screen)
+            try: key=read_key(nav.screen,100)
             except curses.error: continue
             if key=='\x1b': return
             if key in (curses.KEY_UP,curses.KEY_PPAGE): offset=max(0,offset-(visible if key==curses.KEY_PPAGE else 1))

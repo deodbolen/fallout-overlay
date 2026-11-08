@@ -40,15 +40,38 @@ class YesManTests(unittest.TestCase):
 
     def test_connectivity_result_and_timeout_restored(self):
         import yes_man_ui
-        nav=Mock(); nav.screen.getdelay.return_value=-1
-        with patch('yes_man.reply',return_value='OK') as reply:
+        nav=Mock(); nav.screen=Mock(spec=['timeout','get_wch'])
+        with patch('yes_man.reply',return_value='OK') as reply, patch('yes_man_ui.read_key',side_effect=__import__('curses').error):
             yes_man_ui.test_connection(nav,self.config())
             self.assertIn('successful',nav.message)
             self.assertEqual(reply.call_args.args[1][0]['role'],'user')
         nav.screen.timeout.assert_called_with(-1)
-        with patch('yes_man.reply',side_effect=ValueError('HTTP 401')):
+        with patch('yes_man.reply',side_effect=ValueError('HTTP 401')), patch('yes_man_ui.read_key',side_effect=__import__('curses').error):
             yes_man_ui.test_connection(nav,self.config())
             self.assertIn('HTTP 401',nav.message)
+
+    def test_escape_during_connection_check_restores_input(self):
+        import threading
+        import yes_man_ui
+        gate=threading.Event()
+        nav=Mock(); nav.screen=Mock(spec=['timeout','get_wch'])
+        def slow_reply(*args):
+            gate.wait(2)
+            return 'OK'
+        try:
+            with patch('yes_man.reply',side_effect=slow_reply), patch('yes_man_ui.read_key',return_value='\x1b'):
+                yes_man_ui.test_connection(nav,self.config())
+                self.assertIn('dismissed',nav.message)
+                nav.screen.timeout.assert_called_with(-1)
+        finally: gate.set()
+
+    def test_escape_parser_without_nonexistent_getdelay(self):
+        from navigator_input import read_key
+        import curses
+        screen=Mock(spec=['get_wch','timeout'])
+        screen.get_wch.side_effect=['\x1b',curses.error()]
+        self.assertEqual(read_key(screen,100),'\x1b')
+        screen.timeout.assert_called_with(100)
 
     def test_invalid_config_and_unexpected_reply(self):
         for url in ('file:///tmp/test','http://user:password@server','https://server?key=secret'):

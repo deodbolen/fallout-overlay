@@ -2,10 +2,9 @@
 import curses
 
 
-def read_key(screen):
+def read_key(screen,delay=-1):
     key=screen.get_wch()
     if key!='\x1b': return key
-    delay=screen.getdelay()
     screen.timeout(30)
     try:
         try: following=screen.get_wch()
