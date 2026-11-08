@@ -27,9 +27,9 @@ def configure(nav):
         choice=nav.menu('YES MAN // SERVER',[
             'Server type: '+config['protocol'],'Server address: '+config['url'],
             'Model: '+(config['model'] or '(required)'),
-            'API key: '+('Saved' if config['api_key'] else 'None'), 'Save','Cancel'],
+            'API key: '+('Saved' if config['api_key'] else 'None'), 'Save','Test connection','Cancel'],
             detail=nav.message or 'Use your LLM API address. Localhost refers to the machine running Fallout.')
-        if choice is None or choice==5: return
+        if choice is None or choice==6: return
         if choice==0:
             kind=nav.menu('SERVER TYPE',['OpenAI compatible','Ollama','Cancel'])
             if kind in (0,1):
@@ -43,6 +43,34 @@ def configure(nav):
         elif choice==4:
             try: yes_man.save(config); nav.message='Yes Man server saved.'; return
             except ValueError as error: nav.message=str(error)
+        elif choice==5: test_connection(nav,config)
+
+
+def test_connection(nav,config):
+    try: config=yes_man.validate(config)
+    except ValueError as error:
+        nav.message=str(error); return
+    done=threading.Event(); errors=[]
+    def work():
+        try: yes_man.reply(config,[{'role':'user','content':'Connection test. Reply with OK.'}])
+        except Exception as error: errors.append(error)
+        finally: done.set()
+    threading.Thread(target=work,daemon=True).start()
+    delay=nav.screen.getdelay()
+    nav.screen.timeout(100)
+    frame=0
+    try:
+        while not done.is_set():
+            nav.draw('YES MAN // TEST CONNECTION',
+                     ['Checking server and model'+'.'*(frame%3+1),config['url'],config['model']],
+                     detail='Sending a short test message. Esc returns to settings.',highlight=False)
+            frame+=1
+            try: key=read_key(nav.screen)
+            except curses.error: continue
+            if key=='\x1b':
+                nav.message='Connection test dismissed.'; return
+        nav.message=('Connection failed: '+str(errors[0])) if errors else 'Connection successful! Server and model replied.'
+    finally: nav.screen.timeout(delay)
 
 
 def run(nav):

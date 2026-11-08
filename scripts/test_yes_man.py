@@ -38,6 +38,18 @@ class YesManTests(unittest.TestCase):
             self.assertEqual(request.get_header('Authorization'),'Bearer key')
             self.assertEqual(len(messages),1)
 
+    def test_connectivity_result_and_timeout_restored(self):
+        import yes_man_ui
+        nav=Mock(); nav.screen.getdelay.return_value=-1
+        with patch('yes_man.reply',return_value='OK') as reply:
+            yes_man_ui.test_connection(nav,self.config())
+            self.assertIn('successful',nav.message)
+            self.assertEqual(reply.call_args.args[1][0]['role'],'user')
+        nav.screen.timeout.assert_called_with(-1)
+        with patch('yes_man.reply',side_effect=ValueError('HTTP 401')):
+            yes_man_ui.test_connection(nav,self.config())
+            self.assertIn('HTTP 401',nav.message)
+
     def test_invalid_config_and_unexpected_reply(self):
         for url in ('file:///tmp/test','http://user:password@server','https://server?key=secret'):
             with self.assertRaises(ValueError): yes_man.validate(self.config(url=url))
