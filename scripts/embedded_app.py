@@ -270,7 +270,7 @@ class Host:
         available_h=max(1,size.height-8*cell_h)
         available_w=max(1,size.width*.30)
         image=self.yes_man_pixbuf
-        # A deep bezel and bowed screen edges give the portrait a bubble-TV shape.
+        # A deep bezel and smooth rounded corners frame the portrait like a TV.
         bezel=max(3,min(14,available_w*.045))
         factor=min(max(1,available_w-2*bezel)/image.get_width(),
                    max(1,available_h-2*bezel)/image.get_height())
@@ -280,16 +280,24 @@ class Host:
         context.translate(size.width-outer_w-16,3*cell_h+(available_h-outer_h)/2)
 
         def bubble(x,y,w,h):
+            # Elliptical corner arcs join straight edges with matching tangents.
+            # Keep the curve symmetrical instead of bowing each edge separately.
+            radius_x=max(1,outer_w*.20-x); radius_y=max(1,outer_h*.20-y)
+            k=.5522847498307936
             context.new_path()
-            context.move_to(x+.22*w,y+.025*h)
-            context.curve_to(x+.38*w,y-.008*h,x+.62*w,y-.008*h,x+.78*w,y+.025*h)
-            context.curve_to(x+.96*w,y+.045*h,x+.98*w,y+.08*h,x+.99*w,y+.26*h)
-            context.curve_to(x+1.015*w,y+.42*h,x+1.015*w,y+.58*h,x+.99*w,y+.74*h)
-            context.curve_to(x+.98*w,y+.92*h,x+.96*w,y+.955*h,x+.78*w,y+.975*h)
-            context.curve_to(x+.62*w,y+1.008*h,x+.38*w,y+1.008*h,x+.22*w,y+.975*h)
-            context.curve_to(x+.04*w,y+.955*h,x+.02*w,y+.92*h,x+.01*w,y+.74*h)
-            context.curve_to(x-.015*w,y+.58*h,x-.015*w,y+.42*h,x+.01*w,y+.26*h)
-            context.curve_to(x+.02*w,y+.08*h,x+.04*w,y+.045*h,x+.22*w,y+.025*h)
+            context.move_to(x+radius_x,y)
+            context.line_to(x+w-radius_x,y)
+            context.curve_to(x+w-radius_x+k*radius_x,y,
+                             x+w,y+radius_y-k*radius_y,x+w,y+radius_y)
+            context.line_to(x+w,y+h-radius_y)
+            context.curve_to(x+w,y+h-radius_y+k*radius_y,
+                             x+w-radius_x+k*radius_x,y+h,x+w-radius_x,y+h)
+            context.line_to(x+radius_x,y+h)
+            context.curve_to(x+radius_x-k*radius_x,y+h,
+                             x,y+h-radius_y+k*radius_y,x,y+h-radius_y)
+            context.line_to(x,y+radius_y)
+            context.curve_to(x,y+radius_y-k*radius_y,
+                             x+radius_x-k*radius_x,y,x+radius_x,y)
             context.close_path()
 
         bubble(0,0,outer_w,outer_h)
