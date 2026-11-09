@@ -1,6 +1,7 @@
 """Yes Man server configuration and plain chat transport."""
 import json
 import ssl
+from pathlib import Path
 from urllib.parse import urlsplit
 from urllib.request import Request, build_opener, HTTPRedirectHandler, HTTPSHandler
 from urllib.error import HTTPError, URLError
@@ -8,7 +9,7 @@ from ssh_manager import config_dir, atomic_json
 
 APP={'name':'Yes Man','path':'builtin:yes-man','builtin':'yes-man','terminal':True,'exec':''}
 DEFAULT={'protocol':'OpenAI compatible','url':'http://localhost:11434/v1','model':'','api_key':'','verify_tls':True}
-SYSTEM='You are Yes Man, a cheerful, helpful assistant in a RobCo terminal. Be clear and honest about uncertainty. You can only chat; do not claim to run commands or access files.'
+SYSTEM=Path(__file__).with_name('yes_man_prompt.txt').read_text(encoding='utf-8').strip()
 
 
 def settings():
