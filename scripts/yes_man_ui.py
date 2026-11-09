@@ -5,7 +5,7 @@ import threading
 import textwrap
 import yes_man
 from navigator_input import read_key
-from text_entry import TextField, draw_box, cursor
+from text_entry import TextField, draw_box, cursor, cells
 
 
 def secret(nav):
@@ -92,55 +92,104 @@ def portrait(visible):
     return True
 
 
+def chat_panel(nav,messages,field,offset,status,native):
+    screen=nav.screen; height,width=screen.getmaxyx()
+    left=int(width*.35) if width>=60 else 1
+    right=width-2; top=3; bottom=height-4
+    capacity=max(1,right-left-3); visible=max(1,bottom-top-5)
+    nav.draw('YES MAN // CHAT',[],detail=status,refresh=False)
+    attr=curses.color_pair(1)
+    try:
+        if curses.has_colors() and curses.can_change_color() and curses.COLORS>20:
+            curses.init_color(20,25,90,40)
+            curses.init_pair(2,curses.COLOR_GREEN,20)
+            attr=curses.color_pair(2)
+    except curses.error: pass
+    def put(row,col,text,style=0):
+        if row<0 or row>=height-1 or col<0 or col>=width-1: return
+        try: screen.addnstr(row,col,text,max(1,width-col-1),attr|style)
+        except curses.error: pass
+    for row in range(top,bottom+1): put(row,left,' '*max(1,right-left+1))
+    put(top,left,'┌'+'─'*max(1,right-left-1)+'┐')
+    put(bottom,left,'└'+'─'*max(1,right-left-1)+'┘')
+    for row in range(top+1,bottom):
+        put(row,left,'│'); put(row,right,'│')
+    put(bottom-3,left,'├'+'─'*max(1,right-left-1)+'┤')
+    put(bottom-2,left+2,'MESSAGE',curses.A_BOLD)
+    if not native and left>20:
+        for row,line in enumerate(['YES MAN','.----------.','|  ^    ^  |',r'|   \__/   |',"'----------'"],top+2):
+            put(row,2,line)
+    lines=[]
+    for message in messages:
+        lines.append('YOU' if message['role']=='user' else 'YES MAN')
+        for line in message['content'].splitlines():
+            # Wrap by display cells so CJK and emoji stay inside the panel.
+            part=''
+            for char in line:
+                if part and cells(part+char)>capacity: lines.append(part); part=''
+                part+=char
+            lines.append(part)
+        lines.append('')
+    offset=max(0,min(offset,max(0,len(lines)-visible)))
+    for row,line in enumerate(lines[offset:offset+visible],top+1): put(row,left+2,line)
+    start=0
+    while start<field.position and cells(field.value[start:field.position])>=capacity: start+=1
+    shown=''
+    for char in field.value[start:]:
+        if cells(shown+char)>capacity: break
+        shown+=char
+    put(bottom-1,left+2,shown)
+    try: screen.move(bottom-1,left+2+cells(field.value[start:field.position]))
+    except curses.error: pass
+    screen.refresh()
+    return offset,visible
+
+
 def chat(nav):
     config=yes_man.settings()
     try: yes_man.validate(config)
     except ValueError: configure(nav); return
-    messages=nav.yes_man_messages; offset=0; status='N: New message   ↑↓: Scroll   Esc: Back'
+    messages=nav.yes_man_messages; offset=10**9
+    status='Enter: Send   ↑↓: Scroll   Esc: Back'
+    field=TextField()
     task=None; result=[]; errors=[]; done=threading.Event()
     native=portrait(True)
-    nav.screen.timeout(100)
+    nav.screen.timeout(100); cursor(True)
     try:
         while True:
-            width=nav.screen.getmaxyx()[1]; visible=max(1,nav.screen.getmaxyx()[0]-6)
-            if native: width=max(10,int(width*.66))
-            lines=['          YES MAN', '        .----------.', '        |  ^    ^  |', '        |   \\__/   |', '        \'----------\'','']
-            if native: lines=[]
-            for message in messages:
-                lines.append('YOU' if message['role']=='user' else 'YES MAN')
-                for line in message['content'].splitlines():
-                    lines.extend(textwrap.wrap(line,max(1,width-2),replace_whitespace=False,drop_whitespace=False) or [''])
-                lines.append('')
-            offset=max(0,min(offset,max(0,len(lines)-visible)))
-            nav.draw('YES MAN // '+config['model'],lines,offset,detail=status,highlight=False)
+            offset,visible=chat_panel(nav,messages,field,offset,status,native)
             if task and done.is_set():
                 task=None
-                if errors: status=str(errors[0])+'  N: Retry / new message'
+                if errors:
+                    status=str(errors[0])+'  Enter: Retry'
+                    if not field.value: field.replace(pending['content'])
                 else:
-                    messages.extend([pending,{'role':'assistant','content':result[0]}])
-                    offset=10**9; status='N: New message   ↑↓: Scroll   Esc: Back'
+                    messages.append({'role':'assistant','content':result[0]})
+                    offset=10**9; status='Enter: Send   ↑↓: Scroll   Esc: Back'
             try: key=read_key(nav.screen,100)
             except curses.error: continue
             if key=='\x1b': return
             if key in (curses.KEY_UP,curses.KEY_PPAGE): offset=max(0,offset-(visible if key==curses.KEY_PPAGE else 1))
             elif key in (curses.KEY_DOWN,curses.KEY_NPAGE): offset+=visible if key==curses.KEY_NPAGE else 1
-            elif key in ('n','N','\n','\r') and task is None:
-                nav.screen.timeout(-1)
-                portrait(False)
-                try: value=nav.text('MESSAGE TO YES MAN')
-                finally:
-                    portrait(True)
-                    nav.screen.timeout(100)
+            elif key in ('\n','\r',curses.KEY_ENTER) and task is None:
+                value=field.value.strip()
                 if not value: continue
+                field.replace('')
                 pending={'role':'user','content':value}; result=[]; errors=[]; done=threading.Event()
-                snapshot=list(messages)+[pending]
+                # Replace a failed pending message only when explicitly retrying it.
+                if messages and messages[-1]['role']=='user': messages.pop()
+                messages.append(pending)
+                snapshot=list(messages)
+                offset=10**9
                 # Bind task state so leaving this screen never changes another request.
                 def work(config=config,messages=snapshot,result=result,errors=errors,done=done):
                     try: result.append(yes_man.reply(config,messages))
                     except Exception as error: errors.append(error)
                     finally: done.set()
                 task=threading.Thread(target=work,daemon=True); task.start()
-                status='Yes Man is thinking…  Esc: Back'
+                status='Yes Man is thinking…  You can type your next message.'
+            else: field.edit(key)
     finally:
+        cursor(False)
         portrait(False)
         nav.screen.timeout(-1)

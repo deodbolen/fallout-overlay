@@ -277,7 +277,7 @@ class Host:
         width=image.get_width()*factor; height=image.get_height()*factor
         outer_w=width+2*bezel; outer_h=height+2*bezel
         context.save()
-        context.translate(size.width-outer_w-16,3*cell_h+(available_h-outer_h)/2)
+        context.translate(16,3*cell_h+(available_h-outer_h)/2)
 
         def bubble(x,y,w,h):
             # Elliptical corner arcs join straight edges with matching tangents.

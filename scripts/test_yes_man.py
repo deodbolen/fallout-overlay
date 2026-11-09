@@ -93,6 +93,25 @@ class YesManTests(unittest.TestCase):
         self.assertIn('Model unknown',str(caught.exception))
         self.assertNotIn('secret',str(caught.exception))
 
+    def test_chat_types_directly_and_enter_sends(self):
+        import yes_man_ui
+        nav=Mock(); nav.yes_man_messages=[]
+        class ImmediateThread:
+            def __init__(self,target,**kwargs): self.target=target
+            def start(self): self.target()
+        with patch('yes_man.settings',return_value=self.config()), \
+             patch('yes_man.reply',return_value='Hello!') as reply, \
+             patch('yes_man_ui.portrait',return_value=True), \
+             patch('yes_man_ui.cursor'), \
+             patch('yes_man_ui.chat_panel',return_value=(0,10)), \
+             patch('yes_man_ui.threading.Thread',ImmediateThread), \
+             patch('yes_man_ui.read_key',side_effect=['h','i','\n','\x1b']):
+            yes_man_ui.chat(nav)
+        self.assertEqual(reply.call_args.args[1],[{'role':'user','content':'hi'}])
+        self.assertEqual(nav.yes_man_messages,[{'role':'user','content':'hi'},
+                                               {'role':'assistant','content':'Hello!'}])
+        nav.screen.timeout.assert_called_with(-1)
+
     def test_invalid_config_and_unexpected_reply(self):
         for url in ('file:///tmp/test','http://user:password@server','https://server?key=secret'):
             with self.assertRaises(ValueError): yes_man.validate(self.config(url=url))
