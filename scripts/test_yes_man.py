@@ -73,6 +73,26 @@ class YesManTests(unittest.TestCase):
         self.assertEqual(read_key(screen,100),'\x1b')
         screen.timeout.assert_called_with(100)
 
+    def test_exact_fortilab_endpoint_and_tls_option(self):
+        for url in ('https://10.0.1.215/v1','https://10.0.1.215/v1/',
+                    'https://10.0.1.215/v1/chat/completions'):
+            config=self.config(url=url)
+            self.assertEqual(yes_man.endpoint(config),'https://10.0.1.215/v1/chat/completions')
+        self.assertTrue(yes_man.validate(self.config())['verify_tls'])
+        self.assertFalse(yes_man.validate(self.config(verify_tls=False))['verify_tls'])
+
+    def test_server_error_includes_endpoint_and_redacts_key(self):
+        import io
+        opener=MagicMock()
+        opener.open.side_effect=HTTPError('https://server',404,'Not Found',{},
+            io.BytesIO(b'{"error":{"message":"Model unknown; key secret"}}'))
+        with patch('yes_man.build_opener',return_value=opener):
+            with self.assertRaises(ValueError) as caught:
+                yes_man.reply(self.config(api_key='secret'),[])
+        self.assertIn('/v1/chat/completions',str(caught.exception))
+        self.assertIn('Model unknown',str(caught.exception))
+        self.assertNotIn('secret',str(caught.exception))
+
     def test_invalid_config_and_unexpected_reply(self):
         for url in ('file:///tmp/test','http://user:password@server','https://server?key=secret'):
             with self.assertRaises(ValueError): yes_man.validate(self.config(url=url))

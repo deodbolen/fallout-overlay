@@ -28,9 +28,9 @@ def configure(nav):
         choice=nav.menu('YES MAN // SERVER',[
             'Server type: '+config['protocol'],'Server address: '+config['url'],
             'Model: '+(config['model'] or '(required)'),
-            'API key: '+('Saved' if config['api_key'] else 'None'), 'Save','Test connection','Cancel'],
+            'API key: '+('Saved' if config['api_key'] else 'None'), 'Save','Test connection','Verify TLS certificate: '+('On' if config['verify_tls'] else 'Off'),'Cancel'],
             detail=nav.message or 'Use your LLM API address. Localhost refers to the machine running Fallout.')
-        if choice is None or choice==6: return
+        if choice is None or choice==7: return
         if choice==0:
             kind=nav.menu('SERVER TYPE',['OpenAI compatible','Ollama','Cancel'])
             if kind in (0,1):
@@ -45,6 +45,7 @@ def configure(nav):
             try: yes_man.save(config); nav.message='Yes Man server saved.'; return
             except ValueError as error: nav.message=str(error)
         elif choice==5: test_connection(nav,config)
+        elif choice==6: config['verify_tls']=not config['verify_tls']
 
 
 def test_connection(nav,config):
@@ -62,7 +63,7 @@ def test_connection(nav,config):
     try:
         while not done.is_set():
             nav.draw('YES MAN // TEST CONNECTION',
-                     ['Checking server and model'+'.'*(frame%3+1),config['url'],config['model']],
+                     ['Checking server and model'+'.'*(frame%3+1),yes_man.endpoint(config),config['model']],
                      detail='Sending a short test message. Esc returns to settings.',highlight=False)
             frame+=1
             try: key=read_key(nav.screen,100)
