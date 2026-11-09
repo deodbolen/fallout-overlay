@@ -11,6 +11,14 @@ import tool_belt
 class YesManTests(unittest.TestCase):
     def config(self,**values): return dict(yes_man.DEFAULT,model='test-model',**values)
 
+    def test_chat_word_wrapping(self):
+        from yes_man_ui import wrap_chat_line
+        self.assertEqual(wrap_chat_line('hello world',8),['hello','world'])
+        self.assertEqual(wrap_chat_line('hi abcdefghij end',6),['hi','abcdef','ghij','end'])
+        self.assertEqual(wrap_chat_line('hello world',11),['hello world'])
+        self.assertEqual(wrap_chat_line('日本語 test',6),['日本語','test'])
+        self.assertEqual(wrap_chat_line('',10),[''])
+
     def test_builtin_always_available(self):
         with patch('tool_belt.favorites',return_value=[]):
             self.assertEqual(tool_belt.applications([])[0]['builtin'],'yes-man')

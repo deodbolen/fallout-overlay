@@ -2,7 +2,7 @@
 import curses
 import os
 import threading
-import textwrap
+import re
 import yes_man
 from navigator_input import read_key
 from text_entry import TextField, draw_box, cursor, cells
@@ -92,6 +92,27 @@ def portrait(visible):
     return True
 
 
+def wrap_chat_line(text,width):
+    """Keep words together; split only words wider than the full panel."""
+    width=max(1,width)
+    lines=[]; current=''; spacing=''
+    for token in re.findall(r'\s+|\S+',text):
+        if token.isspace():
+            spacing=token.expandtabs(4)
+            continue
+        gap=spacing if current else ''
+        if current and cells(current+gap+token)>width:
+            lines.append(current); current=''; gap=''
+        current+=gap
+        for char in token:
+            if current and cells(current+char)>width:
+                lines.append(current); current=''
+            current+=char
+        spacing=''
+    lines.append(current)
+    return lines
+
+
 def chat_panel(nav,messages,field,offset,status,native):
     screen=nav.screen; height,width=screen.getmaxyx()
     left=int(width*.35) if width>=60 else 1
@@ -123,12 +144,7 @@ def chat_panel(nav,messages,field,offset,status,native):
     for message in messages:
         lines.append('YOU' if message['role']=='user' else 'YES MAN')
         for line in message['content'].splitlines():
-            # Wrap by display cells so CJK and emoji stay inside the panel.
-            part=''
-            for char in line:
-                if part and cells(part+char)>capacity: lines.append(part); part=''
-                part+=char
-            lines.append(part)
+            lines.extend(wrap_chat_line(line,capacity))
         lines.append('')
     offset=max(0,min(offset,max(0,len(lines)-visible)))
     for row,line in enumerate(lines[offset:offset+visible],top+1): put(row,left+2,line)
