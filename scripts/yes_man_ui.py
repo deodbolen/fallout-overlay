@@ -207,7 +207,7 @@ def chat(nav):
                     offset=10**9; status='Enter: Send   ↑↓: Scroll   Esc: Back'
             try: key=read_key(nav.screen,100)
             except curses.error: continue
-            if key=='\x1b': return
+            if key in ('\x1b','\x1d'): return
             if key in (curses.KEY_UP,curses.KEY_PPAGE): offset=max(0,offset-(visible if key==curses.KEY_PPAGE else 1))
             elif key in (curses.KEY_DOWN,curses.KEY_NPAGE): offset+=visible if key==curses.KEY_NPAGE else 1
             elif key in ('\n','\r',curses.KEY_ENTER) and task is None:
@@ -230,5 +230,8 @@ def chat(nav):
             else: field.edit(key)
     finally:
         cursor(False)
-        portrait(False)
-        nav.screen.timeout(-1)
+        try: portrait(False)
+        finally:
+            nav.screen.timeout(-1)
+            nav.screen.clear()
+            nav.screen.refresh()

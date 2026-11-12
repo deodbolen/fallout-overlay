@@ -391,6 +391,10 @@ class Host:
         widget.sudo_retry_count=count
 
     def nav_keys(self,widget,event):
+        if self.yes_man_visible and event.keyval==Gdk.KEY_Escape:
+            # Bypass VTE's Escape/selection handling and terminal sequence timing.
+            widget.feed_child(b'\x1d')
+            return True
         if self.modifier_shortcut(widget,event): return True
         if event.keyval in (Gdk.KEY_F1,Gdk.KEY_F2) and not event.state&Gtk.accelerator_get_default_mod_mask():
             widget.feed_child(b'\x1bOP' if event.keyval==Gdk.KEY_F1 else b'\x1bOQ'); return True

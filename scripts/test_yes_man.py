@@ -50,6 +50,20 @@ class YesManTests(unittest.TestCase):
             yes_man.save_profile('Lab',dict(self.config(),model='other'),overwrite=True)
             self.assertEqual(yes_man.settings()['model'],'other')
 
+    def test_gui_chat_exit_without_waiting_for_server(self):
+        import yes_man_ui
+        nav=Mock(); nav.yes_man_messages=[]
+        with patch('yes_man.settings',return_value=self.config()), \
+             patch('yes_man_ui.portrait',return_value=True) as portrait, \
+             patch('yes_man_ui.cursor'), \
+             patch('yes_man_ui.chat_panel',return_value=(0,10)), \
+             patch('yes_man_ui.read_key',return_value='\x1d'):
+            yes_man_ui.chat(nav)
+        self.assertEqual([call.args for call in portrait.call_args_list],[(True,),(False,)])
+        nav.screen.timeout.assert_called_with(-1)
+        nav.screen.clear.assert_called_once()
+        nav.screen.refresh.assert_called_once()
+
     def test_builtin_always_available(self):
         with patch('tool_belt.favorites',return_value=[]):
             self.assertEqual(tool_belt.applications([])[0]['builtin'],'yes-man')
