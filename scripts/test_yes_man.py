@@ -19,6 +19,37 @@ class YesManTests(unittest.TestCase):
         self.assertEqual(wrap_chat_line('日本語 test',6),['日本語','test'])
         self.assertEqual(wrap_chat_line('',10),[''])
 
+    def test_profiles_round_trip_and_legacy_config_preserved(self):
+        with tempfile.TemporaryDirectory() as folder, patch('yes_man.config_dir',return_value=Path(folder)):
+            first=self.config(api_key='first-secret',verify_tls=False)
+            second=self.config(url='https://second/v1',api_key='second-secret')
+            yes_man.save(first)
+            self.assertEqual(yes_man.profiles(),[])
+            yes_man.save_profile('FortiLab',first)
+            yes_man.save_profile('Other',second)
+            self.assertEqual(yes_man.profiles(),['FortiLab','Other'])
+            self.assertEqual(yes_man.active_profile(),'Other')
+            self.assertEqual(yes_man.select_profile('FortiLab'),first)
+            self.assertEqual(yes_man.settings(),first)
+            self.assertEqual(yes_man.active_profile(),'FortiLab')
+            yes_man.save(second)
+            self.assertEqual(yes_man.active_profile(),'')
+            self.assertEqual(yes_man.select_profile('FortiLab'),first)
+            self.assertEqual((Path(folder)/'yes-man.json').stat().st_mode & 0o777,0o600)
+
+    def test_profile_overwrite_and_failure_preserve_previous_state(self):
+        with tempfile.TemporaryDirectory() as folder, patch('yes_man.config_dir',return_value=Path(folder)):
+            yes_man.save_profile('Lab',self.config())
+            path=Path(folder)/'yes-man.json'; before=path.read_bytes()
+            with self.assertRaises(ValueError): yes_man.save_profile('Lab',dict(self.config(),model='other'))
+            with self.assertRaises(ValueError): yes_man.select_profile('missing')
+            self.assertEqual(path.read_bytes(),before)
+            with patch('yes_man.atomic_json',side_effect=OSError('disk full')):
+                with self.assertRaises(OSError): yes_man.save_profile('Other',self.config())
+            self.assertEqual(path.read_bytes(),before)
+            yes_man.save_profile('Lab',dict(self.config(),model='other'),overwrite=True)
+            self.assertEqual(yes_man.settings()['model'],'other')
+
     def test_builtin_always_available(self):
         with patch('tool_belt.favorites',return_value=[]):
             self.assertEqual(tool_belt.applications([])[0]['builtin'],'yes-man')

@@ -25,12 +25,12 @@ def secret(nav):
 def configure(nav):
     config=yes_man.settings()
     while True:
-        choice=nav.menu('YES MAN // SERVER',[
+        choice=nav.menu('YES MAN // SERVER'+(' // '+yes_man.active_profile() if yes_man.active_profile() else ''),[
             'Server type: '+config['protocol'],'Server address: '+config['url'],
             'Model: '+(config['model'] or '(required)'),
-            'API key: '+('Saved' if config['api_key'] else 'None'), 'Save','Test connection','Verify TLS certificate: '+('On' if config['verify_tls'] else 'Off'),'Cancel'],
+            'API key: '+('Saved' if config['api_key'] else 'None'), 'Save','Test connection','Verify TLS certificate: '+('On' if config['verify_tls'] else 'Off'),'Save as profile','Select profile','Cancel'],
             detail=nav.message or 'Use your LLM API address. Localhost refers to the machine running Fallout.')
-        if choice is None or choice==7: return
+        if choice is None or choice==9: return
         if choice==0:
             kind=nav.menu('SERVER TYPE',['OpenAI compatible','Ollama','Cancel'])
             if kind in (0,1):
@@ -42,10 +42,33 @@ def configure(nav):
             value=secret(nav) if choice==3 else nav.text('YES MAN // '+field.upper(),config[field])
             if value is not None: config[field]=value
         elif choice==4:
-            try: yes_man.save(config); nav.message='Yes Man server saved.'; return
+            try:
+                if config!=yes_man.settings(): nav.yes_man_messages=[]
+                yes_man.save(config); nav.message='Yes Man server saved.'; return
             except ValueError as error: nav.message=str(error)
         elif choice==5: test_connection(nav,config)
         elif choice==6: config['verify_tls']=not config['verify_tls']
+        elif choice==7:
+            name=nav.text('SAVE LLM PROFILE AS')
+            if name is None: continue
+            try:
+                overwrite=name.strip() in yes_man.profiles()
+                if overwrite and nav.menu('REPLACE PROFILE // '+name.strip(),['Cancel','Replace'])!=1: continue
+                yes_man.save_profile(name,config,overwrite=overwrite)
+                nav.yes_man_messages=[]
+                nav.message='Profile saved and selected: '+name.strip()
+            except (OSError,ValueError) as error: nav.message=str(error)
+        elif choice==8:
+            try:
+                names=yes_man.profiles()
+                if not names: nav.message='No saved profiles. Use Save as profile first.'; continue
+                selected=nav.menu('SELECT LLM PROFILE',names+['Cancel'])
+                if selected is None or selected==len(names): continue
+                config=yes_man.select_profile(names[selected])
+                nav.yes_man_messages=[]
+                nav.message='Active profile saved: '+names[selected]
+            except (OSError,ValueError) as error: nav.message=str(error)
+
 
 
 def test_connection(nav,config):

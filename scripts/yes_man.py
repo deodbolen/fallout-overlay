@@ -33,7 +33,59 @@ def validate(config):
     return config
 
 
-def save(config): atomic_json(config_dir()/'yes-man.json',validate(config))
+def _profile_document():
+    path=config_dir()/'yes-man.json'
+    try: document=json.loads(path.read_text(encoding='utf-8'))
+    except FileNotFoundError: return {}
+    if not isinstance(document,dict) or not isinstance(document.get('profiles',{}),dict):
+        raise ValueError('Invalid Yes Man configuration file.')
+    return document
+
+
+def profiles():
+    return sorted(_profile_document().get('profiles',{}),key=str.casefold)
+
+
+def active_profile():
+    document=_profile_document()
+    name=document.get('active_profile','')
+    return name if name in document.get('profiles',{}) else ''
+
+
+def save(config):
+    config=validate(config)
+    document=_profile_document()
+    document.update(config)
+    active=document.get('active_profile','')
+    if document.get('profiles',{}).get(active)!=config: document['active_profile']=''
+    atomic_json(config_dir()/'yes-man.json',document)
+
+
+def save_profile(name,config,*,overwrite=False):
+    if not isinstance(name,str): raise ValueError('Enter a profile name.')
+    name=name.strip()
+    if not name or len(name)>64 or not all(char.isprintable() for char in name):
+        raise ValueError('Use a profile name of 1–64 printable characters.')
+    config=validate(config)
+    document=_profile_document()
+    saved=document.setdefault('profiles',{})
+    if name in saved and not overwrite: raise ValueError('Profile already exists.')
+    saved[name]=config
+    document.update(config)
+    document['active_profile']=name
+    atomic_json(config_dir()/'yes-man.json',document)
+
+
+def select_profile(name):
+    document=_profile_document()
+    saved=document.get('profiles',{})
+    if name not in saved: raise ValueError('Profile is no longer available.')
+    config=validate(saved[name])
+    document.update(config)
+    document['active_profile']=name
+    atomic_json(config_dir()/'yes-man.json',document)
+    return config
+
 
 
 class NoRedirect(HTTPRedirectHandler):
