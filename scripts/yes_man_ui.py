@@ -42,9 +42,9 @@ def configure(nav):
         choice=nav.menu('YES MAN // SERVER'+(' // '+yes_man.active_profile() if yes_man.active_profile() else ''),[
             'Server type: '+config['protocol'],'Server address: '+config['url'],
             'Model: '+(config['model'] or '(required)'),
-            'API key: '+('Saved' if config['api_key'] else 'None'), 'Save','Test connection','Verify TLS certificate: '+('On' if config['verify_tls'] else 'Off'),'Save as profile','Select profile','Cancel'],
+            'API key: '+('Saved' if config['api_key'] else 'None'), 'Save','Test connection','Verify TLS certificate: '+('On' if config['verify_tls'] else 'Off'),'Save as profile','Select profile','Web search: '+('On' if config['search_enabled'] else 'Off'),'SearXNG address: '+(config['search_url'] or '(not configured)'),'Cancel'],
             detail=nav.message or 'Use your LLM API address. Localhost refers to the machine running Fallout.')
-        if choice is None or choice==9: return
+        if choice is None or choice==11: return
         if choice==0:
             kind=nav.menu('SERVER TYPE',['OpenAI compatible','Ollama','Cancel'])
             if kind in (0,1):
@@ -62,6 +62,10 @@ def configure(nav):
             except ValueError as error: nav.message=str(error)
         elif choice==5: test_connection(nav,config)
         elif choice==6: config['verify_tls']=not config['verify_tls']
+        elif choice==9: config['search_enabled']=not config['search_enabled']
+        elif choice==10:
+            value=nav.text('SEARXNG SERVER ADDRESS',config['search_url'])
+            if value is not None: config['search_url']=value
         elif choice==7:
             name=nav.text('SAVE LLM PROFILE AS')
             if name is None: continue
@@ -91,7 +95,7 @@ def test_connection(nav,config):
         nav.message=str(error); return
     done=threading.Event(); errors=[]
     def work():
-        try: yes_man.reply(config,[{'role':'user','content':'Connection test. Reply with OK.'}])
+        try: yes_man.reply(dict(config,search_enabled=False),[{'role':'user','content':'Connection test. Reply with OK.'}])
         except Exception as error: errors.append(error)
         finally: done.set()
     threading.Thread(target=work,daemon=True).start()

@@ -144,3 +144,25 @@ server. Yes Man is a chat assistant; it does not execute commands or read files.
 
 The adapters use [Ollama's chat API](https://docs.ollama.com/api/chat) and the
 [OpenAI-compatible chat completions format](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create).
+
+#### Yes Man web search
+
+In **Yes Man → Configure LLM server**, enter your **SearXNG address** (the server
+base URL or its `/search` URL), set **Web search: On**, then Save or Save as profile.
+Existing profiles default to search off. The SearXNG instance must enable `json`
+in `search.formats`; see its [search API documentation](https://docs.searxng.org/dev/search_api.html).
+The search server is contacted by the machine running Fallout, including over SSH.
+
+A tool-capable OpenAI-compatible or Ollama model can request `web_search` when
+answering a question. Fallout executes only that named tool, returns up to five
+result titles, URLs and snippets, and asks the model to finish its answer. Source
+URLs are appended below the reply. It does not fetch result pages or execute
+commands from results. At most three searches are allowed for a single reply;
+search requests time out after 15 seconds. Queries go to the configured SearXNG
+server; snippets return to your selected LLM. The LLM API key is not sent to search.
+Search uses normal TLS verification independently of the LLM's TLS setting.
+
+The selected model/server must support native tool calls (including the server's
+tool parser, where required). Tool-call-shaped prose is not executed. Search
+failures are returned to the model as errors; no results are invented by the tool.
+The existing Test connection still tests the LLM alone, without running a search.
