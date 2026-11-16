@@ -8,7 +8,7 @@ from urllib.error import HTTPError, URLError
 from ssh_manager import config_dir, atomic_json
 
 APP={'name':'Yes Man','path':'builtin:yes-man','builtin':'yes-man','terminal':True,'exec':''}
-DEFAULT={'protocol':'OpenAI compatible','url':'http://localhost:11434/v1','model':'','api_key':'','verify_tls':True,'search_enabled':False,'search_url':''}
+DEFAULT={'protocol':'OpenAI compatible','url':'http://localhost:11434/v1','model':'','api_key':'','verify_tls':True,'search_enabled':True,'search_url':'http://127.0.0.1:8888'}
 SYSTEM=Path(__file__).with_name('yes_man_prompt.txt').read_text(encoding='utf-8').strip()
 
 
@@ -22,7 +22,7 @@ def settings():
 
 def validate(config):
     verify_tls=config.get('verify_tls',True) is not False
-    search_enabled=config.get('search_enabled',False) is True
+    search_enabled=config.get('search_enabled',True) is True
     config={key:str(config.get(key,value)).strip() for key,value in DEFAULT.items() if key not in ('verify_tls','search_enabled')}
     config['verify_tls']=verify_tls
     config['search_enabled']=search_enabled

@@ -149,7 +149,7 @@ The adapters use [Ollama's chat API](https://docs.ollama.com/api/chat) and the
 
 In **Yes Man → Configure LLM server**, enter your **SearXNG address** (the server
 base URL or its `/search` URL), set **Web search: On**, then Save or Save as profile.
-Existing profiles default to search off. The SearXNG instance must enable `json`
+New configurations use the installer-managed local search service by default. Custom SearXNG instances must enable `json`
 in `search.formats`; see its [search API documentation](https://docs.searxng.org/dev/search_api.html).
 The search server is contacted by the machine running Fallout, including over SSH.
 
@@ -166,3 +166,37 @@ The selected model/server must support native tool calls (including the server's
 tool parser, where required). Tool-call-shaped prose is not executed. Search
 failures are returned to the model as errors; no results are invented by the tool.
 The existing Test connection still tests the LLM alone, without running a search.
+
+
+The desktop installer now includes local SearXNG as a prerequisite. After updating,
+run `./install.sh` from a terminal in your Debian XFCE desktop session. It installs
+Podman and rootless-container dependencies, downloads the official SearXNG image
+on first install, enables JSON results, and starts a user service at
+`http://127.0.0.1:8888`. The official image's resolved digest is pinned in the
+service; repeat installs reuse the cached image. Internet access is required for
+the first image download and for searches. SearXNG's upstream container deployment
+is documented [here](https://docs.searxng.org/admin/installation-docker).
+
+The service starts with your user session and restarts on failure; it is not
+exposed on your LAN. No Docker group membership or root container daemon is used.
+Existing custom search addresses and explicit search-off choices are preserved.
+Missing search addresses in existing configurations/profiles are filled with the
+local URL. To use a previously disabled profile, turn Web search On and save it.
+SSH TUI users on that same machine can use this service while the user service is
+running. A terminal-only machine can install the same Debian Podman dependencies
+and run `/usr/bin/python3 scripts/searxng_service.py install` as a normal user with
+an available systemd user manager; it does not require XFCE configuration changes.
+
+For status and diagnostics:
+
+```bash
+systemctl --user status fallout-searxng.service
+journalctl --user -u fallout-searxng.service -n 50
+```
+
+Restore disables and removes only Fallout's managed search unit. Search settings,
+container images, and cached data are retained for later reinstallation. The local
+port 8888 must be available, and rootless Podman must work for the installing user
+(including subordinate UID/GID allocation). Setup reports failures instead of
+silently proceeding without the search prerequisite. `./install.sh --check`
+remains a read-only Debian package check; it does not download or start containers.

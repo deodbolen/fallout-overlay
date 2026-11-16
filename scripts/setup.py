@@ -102,11 +102,15 @@ def main():
                 src=BACKUP/'files'/str(i)
                 if src.is_dir(): shutil.copytree(src,dest)
                 else: shutil.copy2(src,dest)
+        from searxng_service import restore as restore_search
+        restore_search()
         desktop_shortcuts(restore=True)
         if pathlib.Path('/var/lib/fallout-ui/greeter-background/saved').exists():
             subprocess.run(['sudo','/usr/bin/python3',str(ROOT/'scripts/greeter_background.py'),'restore'],check=True)
         subprocess.Popen(['xfce4-panel'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,start_new_session=True)
         print('Original XFCE configuration restored. Log out/in to refresh existing application windows.'); return
+    from searxng_service import install as install_search
+    install_search()
     # Never overwrite original baseline on repeat install.
     if not BACKUP.exists():
         BACKUP.mkdir(parents=True)
