@@ -2,6 +2,8 @@
 import curses
 import os
 import signal
+from pathlib import Path
+from functools import lru_cache
 import threading
 import re
 import yes_man
@@ -156,6 +158,29 @@ def wrap_chat_line(text,width):
     return lines
 
 
+@lru_cache(maxsize=1)
+def cli_portrait():
+    lines=Path(__file__).resolve().parent.parent.joinpath('assets/yes-man-cli.txt').read_text(encoding='utf-8').splitlines()
+    lines=[''.join(char if char.isprintable() else ' ' for char in line).rstrip() for line in lines]
+    while lines and not lines[0].strip(): lines.pop(0)
+    while lines and not lines[-1].strip(): lines.pop()
+    margin=min((len(line)-len(line.lstrip()) for line in lines if line.strip()),default=0)
+    return tuple(line[margin:] for line in lines)
+
+
+@lru_cache(maxsize=16)
+def fit_cli_portrait(width,height):
+    lines=cli_portrait()
+    source_width=max((len(line) for line in lines),default=0)
+    if not lines or not source_width or width<1 or height<1: return ()
+    scale=min(1,width/source_width,height/len(lines))
+    columns=max(1,int(source_width*scale)); rows=max(1,int(len(lines)*scale))
+    padded=[line.ljust(source_width) for line in lines]
+    return tuple(''.join(padded[min(len(lines)-1,int((y+.5)/scale))]
+                              [min(source_width-1,int((x+.5)/scale))]
+                         for x in range(columns)) for y in range(rows))
+
+
 def chat_panel(nav,messages,field,offset,status,native):
     screen=nav.screen; height,width=screen.getmaxyx()
     left=int(width*.35) if width>=60 else 1
@@ -180,9 +205,12 @@ def chat_panel(nav,messages,field,offset,status,native):
         put(row,left,'│'); put(row,right,'│')
     put(bottom-3,left,'├'+'─'*max(1,right-left-1)+'┤')
     put(bottom-2,left+2,'MESSAGE',curses.A_BOLD)
-    if not native and left>20:
-        for row,line in enumerate(['YES MAN','.----------.','|  ^    ^  |',r'|   \__/   |',"'----------'"],top+2):
-            put(row,2,line)
+    if not native and left>4:
+        artwork=fit_cli_portrait(left-4,max(1,bottom-top-2))
+        art_width=max((cells(line) for line in artwork),default=0)
+        art_left=max(1,(left-art_width)//2)
+        art_top=top+max(0,(bottom-top-len(artwork))//2)
+        for row,line in enumerate(artwork,art_top): put(row,art_left,line)
     lines=[]
     for message in messages:
         lines.append('YOU' if message['role']=='user' else 'YES MAN')
