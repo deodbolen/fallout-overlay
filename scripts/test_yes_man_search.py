@@ -33,11 +33,15 @@ class SearchTests(unittest.TestCase):
             results={'results':[{'url':'https://kernel.org','title':'Linux','snippet':'release'}]}
             history=[{'role':'user','content':'Latest Linux?'}]
             with patch('yes_man._completion',side_effect=[{'tool_calls':[call]},{'content':'Found Linux.'}]) as complete, \
-                 patch('yes_man_search.search',return_value=results) as searching:
+                 patch('yes_man_search.search',return_value=results) as searching, \
+                 patch('yes_man_sources.retrieve_page',return_value={'ok':True,'text':'Linux article content','final_url':'https://kernel.org','error':None}):
                 answer=yes_man.reply(self.config(protocol),history)
                 searching.assert_called_once_with('http://search.local:8080','Linux release')
                 tool=complete.call_args.args[1][-1]
                 self.assertEqual(tool['role'],'tool')
+                evidence=json.loads(tool['content'])['results'][0]['page']
+                self.assertTrue(evidence['ok'])
+                self.assertEqual(evidence['text'],'Linux article content')
                 self.assertEqual(tool['tool_name'] if protocol=='Ollama' else tool['tool_call_id'],
                                  'web_search' if protocol=='Ollama' else 'call-1')
                 self.assertIn('https://kernel.org',answer)

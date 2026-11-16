@@ -1,7 +1,8 @@
 # Standalone Yes Man page retrieval
 
-`scripts/yes_man_retrieval.py` exposes `retrieve_page(url)`. It does not change
-search, tool registration, prompts, response generation, or the terminal interface.
+`scripts/yes_man_retrieval.py` exposes `retrieve_page(url)`. The function itself remains independent of search, prompts, and the terminal
+interface. `yes_man_sources.retrieve_search_results` now calls it to supply
+bounded page evidence to the existing chat tool loop.
 No third-party packages are required.
 
 Return fields:
@@ -47,4 +48,6 @@ and site-specific layouts may yield incomplete content or fail. Source text is
 untrusted data, not instructions. No result links, scripts, or commands execute.
 
 Tests, builds, network retrievals, and validation were intentionally not run for
-this change, as requested. Integration into Yes Man's search pipeline is deferred.
+this change, as requested. The subsequent search-pipeline integration adds focused mocked regressions in
+`test_yes_man_sources.py` and extends the two-protocol tool round-trip test; these
+have not been run.

@@ -1,4 +1,4 @@
-"""Standalone public-page retrieval; not connected to Yes Man's tool/chat loop.
+"""Reusable public-page retrieval, also used by Yes Man's search evidence adapter.
 
 No proxies, cookies, browser execution, or third-party dependencies. DNS answers
 are checked and the connection is pinned to a checked address, including for each

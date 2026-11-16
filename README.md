@@ -155,9 +155,10 @@ The search server is contacted by the machine running Fallout, including over SS
 
 A tool-capable OpenAI-compatible or Ollama model can request `web_search` when
 answering a question. Fallout executes only that named tool, returns up to five
-result titles, URLs and snippets, and asks the model to finish its answer. Source
-URLs are appended below the reply. It does not fetch result pages or execute
-commands from results. At most three searches are allowed for a single reply;
+result titles, URLs and snippets, retrieves bounded excerpts from up to three
+public result pages, and asks the model to finish its answer using page evidence.
+Retrieved-page URLs and search-only links are listed separately below the reply.
+It does not execute commands from results. At most three searches are allowed for a single reply;
 search requests time out after 15 seconds. Queries go to the configured SearXNG
 server; snippets return to your selected LLM. The LLM API key is not sent to search.
 Search uses normal TLS verification independently of the LLM's TLS setting.
@@ -200,3 +201,25 @@ port 8888 must be available, and rootless Podman must work for the installing us
 (including subordinate UID/GID allocation). Setup reports failures instead of
 silently proceeding without the search prerequisite. `./install.sh --check`
 remains a read-only Debian package check; it does not download or start containers.
+
+
+#### Retrieved page evidence
+
+Each Yes Man web-search result is now enriched with an automatic page retrieval
+before it is sent back to the model. Across all searches in one reply, at most
+three distinct URLs are fetched; repeat URLs reuse a reply-local cache. Each
+successful page contributes at most 6,000 text characters. Source extraction can
+be incomplete; a successful fetch does not itself verify a claim.
+
+The model is instructed to ground claims in successful `page.text` excerpts and
+cite their source URLs. Failed/blocked/unsupported/over-limit pages have no page
+text, and snippets are labelled as search-only evidence. The deterministic footer
+lists retrieved pages separately from search-only links and warns when no article
+could be retrieved. This does not guarantee model compliance or implement claim
+comparison, publication-date extraction, or contradiction detection.
+
+Retrieval reuses the standalone public-IP/DNS-pinning checks, TLS verification,
+redirect checks, size limits, and timeouts documented in
+[yes-man-retrieval.md](docs/yes-man-retrieval.md). No dependencies or UI controls
+are added. All network work stays in the existing chat worker so Escape remains
+available while the server, search service, or article fetch is pending.
