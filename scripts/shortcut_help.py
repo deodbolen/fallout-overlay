@@ -30,7 +30,6 @@ def text(section, modifier='ctrl', title='', context=''):
                     'SSH TUI: F5   Copy view with normal terminal scrolling and selection',
                     'Navigator Terminal → M   View/select/copy/export history',
                     'Terminal over SSH: F1 / F2   Previous / next session',
-                    'Terminal alternative: Ctrl+O / Ctrl+P   Previous / next session',
                     'Terminal over SSH: Ctrl+Shift+↑ / ↓   Previous / next session',
                     'Terminal over SSH: Ctrl+Shift+← / →   Previous / next section',
                     'Ctrl+Shift+W   Close session', 'Ctrl+Shift+C / V   Copy / paste',

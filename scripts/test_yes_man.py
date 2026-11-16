@@ -64,6 +64,24 @@ class YesManTests(unittest.TestCase):
         nav.screen.clear.assert_called_once()
         nav.screen.refresh.assert_called_once()
 
+    def test_gui_exit_does_not_require_terminal_input(self):
+        import yes_man_ui
+        nav=Mock(); nav.yes_man_messages=[]
+        def draw(*args):
+            yes_man_ui._exit_requested.set()
+            return 0,10
+        try:
+            with patch('yes_man.settings',return_value=self.config()), \
+                 patch('yes_man_ui.portrait',return_value=True) as portrait, \
+                 patch('yes_man_ui.cursor'), \
+                 patch('yes_man_ui.chat_panel',side_effect=draw), \
+                 patch('yes_man_ui.read_key') as read:
+                yes_man_ui.chat(nav)
+            read.assert_not_called()
+            self.assertEqual(portrait.call_args.args,(False,))
+            nav.screen.timeout.assert_called_with(-1)
+        finally: yes_man_ui._exit_requested.clear()
+
     def test_builtin_always_available(self):
         with patch('tool_belt.favorites',return_value=[]):
             self.assertEqual(tool_belt.applications([])[0]['builtin'],'yes-man')

@@ -1,11 +1,25 @@
 """Keyboard-operated Yes Man chat for the desktop navigator and SSH TUI."""
 import curses
 import os
+import signal
 import threading
 import re
 import yes_man
 from navigator_input import read_key
 from text_entry import TextField, draw_box, cursor, cells
+
+
+# A separate GUI exit signal avoids relying solely on bytes queued in VTE.
+_exit_requested=threading.Event()
+_exit_handler_installed=False
+
+
+def install_exit_handler():
+    global _exit_handler_installed
+    if not _exit_handler_installed:
+        signal.signal(signal.SIGUSR1,lambda *_: _exit_requested.set())
+        _exit_handler_installed=True
+    _exit_requested.clear()
 
 
 def secret(nav):
@@ -105,13 +119,15 @@ def run(nav):
         if choice is None or choice==3: return
         if choice==1: configure(nav)
         elif choice==2: nav.yes_man_messages=[]; nav.message='New conversation started.'
-        else: chat(nav)
+        else:
+            chat(nav)
+            return
 
 
 def portrait(visible):
     if not os.environ.get('FALLOUT_EMBEDDED_SOCKET'): return False
     from embedded_client import request
-    request('yes_man_portrait',visible=visible)
+    request('yes_man_portrait',visible=visible,timeout=2)
     return True
 
 
@@ -192,11 +208,14 @@ def chat(nav):
     status='Enter: Send   ↑↓: Scroll   Esc: Back'
     field=TextField()
     task=None; result=[]; errors=[]; done=threading.Event()
+    install_exit_handler()
     native=portrait(True)
     nav.screen.timeout(100); cursor(True)
     try:
         while True:
+            if _exit_requested.is_set(): return
             offset,visible=chat_panel(nav,messages,field,offset,status,native)
+            if _exit_requested.is_set(): return
             if task and done.is_set():
                 task=None
                 if errors:

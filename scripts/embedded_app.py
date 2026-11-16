@@ -211,6 +211,8 @@ class Host:
         return True
 
     def background_shortcut(self,widget,event):
+        if self.yes_man_visible and event.keyval==Gdk.KEY_Escape:
+            return self.nav_keys(self.navigator,event)
         if self.help_shortcut(widget,event): return True
         if self.modifier_shortcut(widget,event): return True
         modifiers=Gdk.ModifierType.CONTROL_MASK|Gdk.ModifierType.SHIFT_MASK
@@ -393,7 +395,10 @@ class Host:
     def nav_keys(self,widget,event):
         if self.yes_man_visible and event.keyval==Gdk.KEY_Escape:
             # Bypass VTE's Escape/selection handling and terminal sequence timing.
-            widget.feed_child(b'\x1d')
+            if self.nav_pid:
+                try: os.kill(self.nav_pid,signal.SIGUSR1)
+                except ProcessLookupError: pass
+            else: widget.feed_child(b'\x1d')
             return True
         if self.modifier_shortcut(widget,event): return True
         if event.keyval in (Gdk.KEY_F1,Gdk.KEY_F2) and not event.state&Gtk.accelerator_get_default_mod_mask():
@@ -680,7 +685,9 @@ class Host:
                         elif command=='toggle':
                             self.sounds.play('load')
                             if self.window.get_visible(): self.window.hide()
-                            else: self.window.show(); self.window.present()
+                            else:
+                                self.window.show(); self.window.present()
+                                self.stack.get_visible_child().grab_focus()
                             reply({})
                         elif command=='shutdown_for_update':
                             reply({})

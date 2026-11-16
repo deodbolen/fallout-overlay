@@ -23,9 +23,9 @@ class SessionSwitchingTests(unittest.TestCase):
                 self.assertEqual(router.feed(sequence[split:]),(b'',action,b''))
     def test_portable_session_shortcuts_need_no_escape_sequence(self):
         router=InputRouter()
-        self.assertEqual(router.feed(b'\x0f'),(b'','previous',b''))
-        self.assertEqual(router.feed(b'\x10'),(b'','next',b''))
-        self.assertEqual(router.feed(b'pwd\r\x10next'),(b'pwd\r','next',b'next'))
+        self.assertEqual(router.feed(b'\x0f'),(b'\x0f',None,b''))
+        self.assertEqual(router.feed(b'\x10'),(b'\x10',None,b''))
+        self.assertEqual(router.feed(b'pwd\r\x10next'),(b'pwd\r\x10next',None,b''))
         self.assertEqual(router.feed(b'\x0e'),(b'\x0e',None,b''))
         self.assertEqual(router.feed(b'\x1b[A'),(b'\x1b[A',None,b''))
     def test_terminal_shift_arrows_and_passthrough(self):
