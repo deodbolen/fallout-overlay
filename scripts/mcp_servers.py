@@ -1,7 +1,7 @@
-"""Read-only loading of model-independent MCP server configuration."""
+"""Load and persist model-independent MCP server configuration."""
 import json
 
-from ssh_manager import config_dir
+from ssh_manager import atomic_json, config_dir
 
 
 def load():
@@ -21,3 +21,13 @@ def load():
             not isinstance(document.get('servers'), list)):
         raise ValueError('Invalid MCP server configuration: expected schema_version 1 and a servers array.')
     return document
+
+
+def save(document):
+    """Atomically save a version-1 document with owner-only file permissions."""
+    if (not isinstance(document, dict) or
+            type(document.get('schema_version')) is not int or
+            document['schema_version'] != 1 or
+            not isinstance(document.get('servers'), list)):
+        raise ValueError('Invalid MCP server configuration: expected schema_version 1 and a servers array.')
+    atomic_json(config_dir() / 'mcp-servers.json', document)
