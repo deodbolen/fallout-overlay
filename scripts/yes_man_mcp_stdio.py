@@ -332,6 +332,35 @@ class StdioTransport:
         finally:
             self._request_lock.release()
 
+    def initialize(self, timeout=10):
+        """Negotiate MCP 2024-11-05 on an explicitly started transport."""
+        with self._lock:
+            process = self.process
+            if process is None or process.poll() is not None:
+                raise RuntimeError('MCP initialization requires a running transport.')
+        protocol_version = '2024-11-05'
+        result = self.request('initialize', {
+            'protocolVersion': protocol_version,
+            'capabilities': {},
+            'clientInfo': {'name': 'yes-man-mcp', 'version': '0.1.0'},
+        }, timeout=timeout)
+        if not isinstance(result, dict):
+            raise ValueError('Malformed MCP initialization result.')
+        if result.get('protocolVersion') != protocol_version:
+            raise ValueError('Unsupported MCP initialization protocol version.')
+        if not isinstance(result.get('capabilities'), dict):
+            raise ValueError('MCP initialization requires a capabilities object.')
+        server_info = result.get('serverInfo')
+        if (not isinstance(server_info, dict) or
+                any(not isinstance(server_info.get(field), str) or not server_info[field].strip()
+                    for field in ('name', 'version'))):
+            raise ValueError('MCP initialization requires serverInfo with nonempty name and version strings.')
+        with self._lock:
+            if self.process is not process:
+                raise RuntimeError('MCP transport closed or restarted during initialization.')
+            self.send({'jsonrpc': '2.0', 'method': 'notifications/initialized'})
+        return result
+
     def close(self):
         """Terminate and reap the child, escalating after three seconds.
 
