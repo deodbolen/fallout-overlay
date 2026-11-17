@@ -6,6 +6,7 @@ from urllib.parse import urlsplit
 from urllib.request import Request, build_opener, HTTPRedirectHandler, HTTPSHandler
 from urllib.error import HTTPError, URLError
 from ssh_manager import config_dir, atomic_json
+from yes_man_request import RequestContext
 
 APP={'name':'Yes Man','path':'builtin:yes-man','builtin':'yes-man','terminal':True,'exec':''}
 DEFAULT={'protocol':'OpenAI compatible','url':'http://localhost:11434/v1','model':'','api_key':'','verify_tls':True,'search_enabled':True,'search_url':'http://127.0.0.1:8888'}
@@ -146,7 +147,8 @@ def _completion(config,messages,tools=False):
     except (KeyError,IndexError,TypeError,json.JSONDecodeError): raise ValueError('Unexpected server response. Check the server type and model.') from None
 
 
-def reply(config,messages):
+def reply(config,messages,context:RequestContext=None):
+    """Generate a reply, checking optional cancellation between operations."""
     config=validate(config)
     enabled=config['search_enabled']
     directive=SYSTEM
@@ -155,7 +157,9 @@ def reply(config,messages):
     conversation=[{'role':'system','content':directive}]+list(messages)
     sources=[]; calls_used=0; page_cache={}
     for turn in range(4):
+        if context is not None: context.raise_if_cancelled()
         message=_completion(config,conversation,tools=enabled)
+        if context is not None: context.raise_if_cancelled()
         calls=message.get('tool_calls')
         if not calls:
             content=message.get('content')
@@ -179,6 +183,7 @@ def reply(config,messages):
                 if isinstance(arguments,str): arguments=json.loads(arguments)
                 if not isinstance(arguments,dict) or set(arguments)!={'query'}: raise ValueError('Invalid search arguments.')
                 from yes_man_search import search
+                if context is not None: context.raise_if_cancelled()
                 result=search(config['search_url'],arguments['query'])
                 for item in result['results']: sources.append(item['url'])
                 from yes_man_sources import retrieve_search_results
