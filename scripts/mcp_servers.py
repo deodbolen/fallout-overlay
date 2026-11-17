@@ -33,7 +33,13 @@ def save(document):
             document['schema_version'] != 1 or
             not isinstance(document.get('servers'), list)):
         raise ValueError('Invalid MCP server configuration: expected schema_version 1 and a servers array.')
-    atomic_json(config_dir() / 'mcp-servers.json', document)
+    servers = [validate_server(server) for server in document['servers']]
+    identifiers = [server['id'] for server in servers]
+    if len(set(identifiers)) != len(identifiers):
+        raise ValueError('Duplicate MCP server IDs are not allowed.')
+    normalized = dict(document)
+    normalized['servers'] = servers
+    atomic_json(config_dir() / 'mcp-servers.json', normalized)
 
 
 def validate_server(server):
