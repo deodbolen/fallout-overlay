@@ -281,7 +281,7 @@ def chat(nav):
                          context=request_context):
                     try:
                         context.raise_if_cancelled()
-                        response=yes_man.reply(config,messages)
+                        response=yes_man.reply(config,messages,context=context)
                         context.raise_if_cancelled()
                         result.append(response)
                     except RequestCancelled:
