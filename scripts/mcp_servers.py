@@ -183,3 +183,25 @@ def validate_server(server):
             raise ValueError('MCP server bearer_token must be a string.')
         result['url'] = url
     return result
+
+
+def validate_tool_permission(permission):
+    """Normalize one permission record scoped to its owning MCP server.
+
+    Approval policy does not enable a disabled tool. Execution enforcement and
+    association with the owning server are handled by future integration.
+    """
+    if not isinstance(permission, dict):
+        raise ValueError('MCP tool permission must be a dictionary.')
+    if set(permission) - {'tool_name', 'enabled', 'approval'}:
+        raise ValueError('Unknown MCP tool permission fields.')
+    tool_name = permission.get('tool_name')
+    if not isinstance(tool_name, str) or not tool_name.strip():
+        raise ValueError('MCP tool permission requires a nonempty tool_name string.')
+    enabled = permission.get('enabled', False)
+    if not isinstance(enabled, bool):
+        raise ValueError('MCP tool permission enabled must be a boolean.')
+    approval = permission.get('approval', 'always_ask')
+    if approval not in ('always_ask', 'always_allow'):
+        raise ValueError('MCP tool approval must be always_ask or always_allow.')
+    return {'tool_name': tool_name.strip(), 'enabled': enabled, 'approval': approval}
