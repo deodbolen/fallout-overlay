@@ -7,6 +7,7 @@ from functools import lru_cache
 import threading
 import re
 import yes_man
+from yes_man_request import RequestContext, RequestCancelled
 from navigator_input import read_key
 from text_entry import TextField, draw_box, cursor, cells
 
@@ -240,6 +241,7 @@ def chat(nav):
     status='Enter: Send   ↑↓: Scroll   Esc: Back'
     field=TextField()
     task=None; result=[]; errors=[]; done=threading.Event()
+    request_context=None
     install_exit_handler()
     native=portrait(True)
     nav.screen.timeout(100); cursor(True)
@@ -250,6 +252,8 @@ def chat(nav):
             if _exit_requested.is_set(): return
             if task and done.is_set():
                 task=None
+                if request_context.is_cancelled():
+                    continue
                 if errors:
                     status=str(errors[0])+'  Enter: Retry'
                     if not field.value: field.replace(pending['content'])
@@ -266,20 +270,30 @@ def chat(nav):
                 if not value: continue
                 field.replace('')
                 pending={'role':'user','content':value}; result=[]; errors=[]; done=threading.Event()
+                request_context=RequestContext()
                 # Replace a failed pending message only when explicitly retrying it.
                 if messages and messages[-1]['role']=='user': messages.pop()
                 messages.append(pending)
                 snapshot=list(messages)
                 offset=10**9
                 # Bind task state so leaving this screen never changes another request.
-                def work(config=config,messages=snapshot,result=result,errors=errors,done=done):
-                    try: result.append(yes_man.reply(config,messages))
-                    except Exception as error: errors.append(error)
+                def work(config=config,messages=snapshot,result=result,errors=errors,done=done,
+                         context=request_context):
+                    try:
+                        context.raise_if_cancelled()
+                        response=yes_man.reply(config,messages)
+                        context.raise_if_cancelled()
+                        result.append(response)
+                    except RequestCancelled:
+                        pass
+                    except Exception as error:
+                        if not context.is_cancelled(): errors.append(error)
                     finally: done.set()
                 task=threading.Thread(target=work,daemon=True); task.start()
                 status='Yes Man is thinking…  You can type your next message.'
             else: field.edit(key)
     finally:
+        if request_context is not None: request_context.cancel()
         cursor(False)
         try: portrait(False)
         finally:
