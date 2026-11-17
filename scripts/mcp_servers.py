@@ -1,6 +1,8 @@
 """Load and persist model-independent MCP server configuration."""
 import json
 import ipaddress
+import fcntl
+import os
 import re
 from urllib.parse import urlsplit
 
@@ -40,6 +42,28 @@ def save(document):
     normalized = dict(document)
     normalized['servers'] = servers
     atomic_json(config_dir() / 'mcp-servers.json', normalized)
+
+
+def add_server(server):
+    """Add and return a normalized server under a complete transaction lock.
+
+    Concurrent additions share this advisory lock. Future read-modify-write
+    operations must use the same lock; direct save() remains a document writer.
+    """
+    directory = config_dir()
+    directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with (directory / 'mcp-servers.lock').open('a') as lock:
+        os.fchmod(lock.fileno(), 0o600)
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        document = load()
+        normalized = validate_server(server)
+        if any(validate_server(existing)['id'] == normalized['id']
+               for existing in document['servers']):
+            raise ValueError('Duplicate MCP server IDs are not allowed.')
+        updated = dict(document)
+        updated['servers'] = document['servers'] + [normalized]
+        save(updated)
+        return normalized
 
 
 def validate_server(server):
