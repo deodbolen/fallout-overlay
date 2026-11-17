@@ -106,12 +106,15 @@ def endpoint(config):
     return base+('/chat/completions' if base.endswith('/v1') else '/v1/chat/completions')
 
 
-def _completion(config,messages,tools=False):
+def _completion(config,messages,tools=False,tool_definitions=None):
     config=validate(config)
     target=endpoint(config)
     ollama=config['protocol']=='Ollama'
     payload={'model':config['model'],'messages':messages,'stream':False}
-    if tools:
+    if tool_definitions is not None:
+        if tool_definitions:
+            payload['tools']=tool_definitions
+    elif tools:
         from yes_man_search import TOOL
         payload['tools']=[TOOL]
     headers={'Content-Type':'application/json','Accept':'application/json'}
