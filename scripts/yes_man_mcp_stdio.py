@@ -39,6 +39,10 @@ class StdioTransport:
         self._receive_process = None
         self._receive_buffer = bytearray()
         self._receive_failed = False
+        self._request_lock = threading.Lock()
+        self._next_request_id = 1
+        self._request_process = None
+        self._pending_responses = []
 
     def start(self):
         """Launch explicitly, or return the already running owned process.
@@ -193,6 +197,140 @@ class StdioTransport:
             return message
         finally:
             self._receive_lock.release()
+
+    def request(self, method, params=None, timeout=10):
+        """Send one JSON-RPC request and return its ID-matched result.
+
+        Only one request may be outstanding. Notifications are consumed without
+        execution; server requests are explicitly rejected. Unmatched responses
+        are retained for this process (up to 64); reaching that bound raises an
+        error before consuming more input. No background reader is introduced.
+        """
+        if not isinstance(method, str) or not method.strip():
+            raise ValueError('JSON-RPC method must be a nonempty string.')
+        if params is not None and not isinstance(params, (dict, list)):
+            raise ValueError('JSON-RPC params must be a dictionary or list.')
+        try:
+            if isinstance(timeout, bool) or not isinstance(timeout, (int, float)):
+                raise ValueError
+            timeout = float(timeout)
+            if not math.isfinite(timeout) or timeout <= 0:
+                raise ValueError
+        except (ValueError, OverflowError):
+            raise ValueError('MCP request timeout must be a positive finite number.') from None
+        deadline = time.monotonic() + timeout
+        if not self._request_lock.acquire(blocking=False):
+            raise RuntimeError('An MCP stdio request is already outstanding.')
+
+        def remaining():
+            left = deadline - time.monotonic()
+            if left <= 0:
+                raise TimeoutError('MCP request timed out.')
+            return left
+
+        class DeadlineInput:
+            # send() still owns framing and full-write handling. This temporary
+            # unbuffered adapter makes its pipe writes obey the same deadline.
+            def __init__(self, pipe):
+                self.pipe = pipe
+                self.descriptor = pipe.fileno()
+
+            @property
+            def closed(self):
+                return self.pipe.closed
+
+            def write(self, data):
+                while True:
+                    _, writable, _ = select.select([], [self.descriptor], [], remaining())
+                    if not writable:
+                        raise TimeoutError('MCP request timed out sending.')
+                    remaining()
+                    try:
+                        return os.write(self.descriptor, data)
+                    except BlockingIOError:
+                        continue
+
+            def flush(self):
+                remaining()  # Writes above go directly to the pipe.
+
+        try:
+            if not self._lock.acquire(timeout=min(remaining(), threading.TIMEOUT_MAX)):
+                raise TimeoutError('MCP request timed out waiting for transport.')
+            try:
+                process = self.process
+                if process is None or process.poll() is not None:
+                    raise RuntimeError('MCP server process is not running.')
+                if self._request_process is not process:
+                    self._request_process = process
+                    self._pending_responses = []
+                identifier = self._next_request_id
+                self._next_request_id += 1
+                message = {'jsonrpc': '2.0', 'id': identifier, 'method': method}
+                if params is not None:
+                    message['params'] = params
+                pipe = process.stdin
+                if pipe is None or pipe.closed:
+                    raise RuntimeError('MCP server stdin is unavailable.')
+                blocking = os.get_blocking(pipe.fileno())
+                try:
+                    os.set_blocking(pipe.fileno(), False)
+                    process.stdin = DeadlineInput(pipe)
+                    try:
+                        self.send(message)
+                    except RuntimeError:
+                        remaining()  # Preserve TimeoutError despite send's I/O wrapper.
+                        raise
+                finally:
+                    process.stdin = pipe
+                    os.set_blocking(pipe.fileno(), blocking)
+            finally:
+                self._lock.release()
+
+            while True:
+                remaining()
+                if self.process is not process:
+                    raise RuntimeError('MCP transport closed or restarted during request.')
+                matched = next((index for index, response in enumerate(self._pending_responses)
+                                if type(response['id']) is int and response['id'] == identifier), None)
+                if matched is not None:
+                    response = self._pending_responses.pop(matched)
+                else:
+                    if len(self._pending_responses) >= 64:
+                        raise RuntimeError('MCP unmatched-response buffer is full; restart the transport.')
+                    response = self.receive(timeout=remaining())
+                    if self.process is not process:
+                        raise RuntimeError('MCP transport closed or restarted during request.')
+                    if response.get('jsonrpc') != '2.0':
+                        raise ValueError('Invalid JSON-RPC response version.')
+                    if 'method' in response:
+                        if 'id' in response:
+                            raise ValueError('Server-initiated JSON-RPC requests are not supported.')
+                        if (not isinstance(response['method'], str) or not response['method'].strip() or
+                                'result' in response or 'error' in response or
+                                ('params' in response and not isinstance(response['params'], (dict, list)))):
+                            raise ValueError('Malformed JSON-RPC notification.')
+                        continue
+                    if ('id' not in response or
+                            (response['id'] is not None and type(response['id']) not in (int, str)) or
+                            ('result' in response) == ('error' in response)):
+                        raise ValueError('Malformed JSON-RPC response.')
+                    if 'error' in response:
+                        error = response['error']
+                        if (not isinstance(error, dict) or type(error.get('code')) is not int or
+                                not isinstance(error.get('message'), str)):
+                            raise ValueError('Malformed JSON-RPC error response.')
+                    if type(response['id']) is not int or response['id'] != identifier:
+                        self._pending_responses.append(response)
+                        continue
+                if time.monotonic() >= deadline:
+                    self._pending_responses.append(response)
+                    raise TimeoutError('MCP request timed out.')
+                if 'error' in response:
+                    # Do not expose server error text/data, which may contain secrets.
+                    raise RuntimeError('MCP JSON-RPC request failed with error code ' + str(response['error']['code']) + '.')
+                return response['result']
+        finally:
+            self._request_lock.release()
 
     def close(self):
         """Terminate and reap the child, escalating after three seconds.
