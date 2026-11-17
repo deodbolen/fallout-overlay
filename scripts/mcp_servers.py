@@ -137,6 +137,25 @@ def validate_server(server):
     if not isinstance(server.get('enabled'), bool):
         raise ValueError('MCP server enabled must be a boolean.')
 
+    permissions = server.get('tool_permissions', {})
+    if not isinstance(permissions, dict):
+        raise ValueError('MCP server tool_permissions must be a dictionary.')
+    normalized_permissions = {}
+    for tool_name, permission in permissions.items():
+        if not isinstance(permission, dict):
+            raise ValueError('MCP tool permission must be a dictionary.')
+        if 'tool_name' in permission and permission['tool_name'] != tool_name:
+            raise ValueError('MCP tool permission name conflicts with its dictionary key.')
+        record = dict(permission)
+        record['tool_name'] = tool_name
+        normalized = validate_tool_permission(record)
+        name = normalized.pop('tool_name')
+        if name in normalized_permissions:
+            raise ValueError('Duplicate normalized MCP tool permission names are not allowed.')
+        normalized_permissions[name] = normalized
+    # Unlisted tools receive no grant; execution enforcement is a separate layer.
+    result['tool_permissions'] = normalized_permissions
+
     if transport == 'stdio':
         if 'url' in server or 'bearer_token' in server:
             raise ValueError('stdio servers cannot contain url or bearer_token fields.')
