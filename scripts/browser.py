@@ -154,7 +154,8 @@ class Navigator:
         h,w=self.screen.getmaxyx(); self.screen.erase()
         tabs='   '.join(('[  '+s+'  ]' if s=='⚙️' else '['+s+']') if i==self.section else s for i,s in enumerate(self.sections))
         self.put(0,'ROBCO TERMLINK // '+tabs,curses.A_BOLD)
-        self.put(1,title,curses.A_BOLD)
+        self.put(1,'─'*max(0,w-1))
+        self.put(2,title,curses.A_BOLD)
         visible=max(1,h-6); offset=max(0,selected-visible+1)
         if not highlight: offset=min(selected,max(0,len(labels)-visible))
         for index,label in enumerate(labels[offset:offset+visible],offset):
