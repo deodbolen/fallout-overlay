@@ -154,12 +154,12 @@ class Navigator:
         h,w=self.screen.getmaxyx(); self.screen.erase()
         tabs='   '.join(('[  '+s+'  ]' if s=='⚙️' else '['+s+']') if i==self.section else s for i,s in enumerate(self.sections))
         self.put(0,'ROBCO TERMLINK // '+tabs,curses.A_BOLD)
-        self.put(1,'█'*max(0,w-1),curses.A_BOLD)
-        self.put(2,title,curses.A_BOLD)
-        visible=max(1,h-6); offset=max(0,selected-visible+1)
+        self.put(1,'▀'*max(0,w-1),curses.A_BOLD)
+        self.put(3,title,curses.A_BOLD)
+        visible=max(1,h-7); offset=max(0,selected-visible+1)
         if not highlight: offset=min(selected,max(0,len(labels)-visible))
         for index,label in enumerate(labels[offset:offset+visible],offset):
-            self.put(3+index-offset,label,curses.A_REVERSE if highlight and index==selected else 0)
+            self.put(4+index-offset,label,curses.A_REVERSE if highlight and index==selected else 0)
         self.put(h-2,detail or self.message)
         footer=footer.replace('CTRL+←→',navigator_settings.section_modifier().upper()+'+←→')
         if os.environ.get('FALLOUT_EMBEDDED_SOCKET'):
@@ -188,7 +188,7 @@ class Navigator:
             # Keep the standalone terminal fallback at the original clock height.
             height=5*max(1,min(max(1,h-7)//5,max(1,w-1)//27//2))
             lines=clock_lines(value,max(1,w-5),height)
-            top=3+max(0,(h-7-len(lines))//2)
+            top=4+max(0,(h-8-len(lines))//2)
             for offset,line in enumerate(lines):
                 left=max(0,(w-1-len(line))//2-12)
                 self.put(top+offset,' '*left+line)
@@ -549,8 +549,8 @@ class Navigator:
             if key in ('\x1b','q',curses.KEY_BACKSPACE,'\x7f'): return
             if key==curses.KEY_UP: selected=max(0,selected-1)
             elif key==curses.KEY_DOWN:selected=min(len(raw)-1,selected+1)
-            elif key==curses.KEY_PPAGE:selected=max(0,selected-max(1,self.screen.getmaxyx()[0]-6))
-            elif key==curses.KEY_NPAGE:selected=min(len(raw)-1,selected+max(1,self.screen.getmaxyx()[0]-6))
+            elif key==curses.KEY_PPAGE:selected=max(0,selected-max(1,self.screen.getmaxyx()[0]-7))
+            elif key==curses.KEY_NPAGE:selected=min(len(raw)-1,selected+max(1,self.screen.getmaxyx()[0]-7))
             elif key==curses.KEY_HOME:selected=0
             elif key==curses.KEY_END:selected=len(raw)-1
             elif key==curses.KEY_LEFT:horizontal=max(0,horizontal-8)
@@ -1069,12 +1069,12 @@ class Navigator:
             while True:
                 try:
                     page,title,labels,items=self.rows()
-                    limit=len(labels)-(max(1,self.screen.getmaxyx()[0]-6) if page=='dashboard' else 1)
+                    limit=len(labels)-(max(1,self.screen.getmaxyx()[0]-7) if page=='dashboard' else 1)
                     index=max(0,min(self.selected.get(page,0),limit))
                     self.selected[page]=index
                     detail=(self.message or str(items[index][0])) if page=='home' else self.message
                     if page=='dashboard' and not detail:
-                        detail='LIVE  |  '+datetime.now().strftime('%H:%M:%S')+'  |  '+str(index+1)+'–'+str(min(len(labels),index+max(1,self.screen.getmaxyx()[0]-6)))+' / '+str(len(labels))
+                        detail='LIVE  |  '+datetime.now().strftime('%H:%M:%S')+'  |  '+str(index+1)+'–'+str(min(len(labels),index+max(1,self.screen.getmaxyx()[0]-7)))+' / '+str(len(labels))
                     redraw=self.draw_clock if page=='clock' else lambda: self.draw(title,labels,index,detail=detail,highlight=page!='dashboard')
                     if self.transition_pending:
                         self.transition_pending=False
@@ -1101,8 +1101,8 @@ class Navigator:
                         self.select_file_range(items,index,-1 if key in ('select_up',curses.KEY_SR) else 1)
                     elif key in (curses.KEY_DOWN,'j'): self.selected[page]=min(len(labels)-1,index+1)
                     elif key in (curses.KEY_UP,'k'): self.selected[page]=max(0,index-1)
-                    elif key==curses.KEY_NPAGE: self.selected[page]=min(len(labels)-1,index+max(1,self.screen.getmaxyx()[0]-6))
-                    elif key==curses.KEY_PPAGE: self.selected[page]=max(0,index-max(1,self.screen.getmaxyx()[0]-6))
+                    elif key==curses.KEY_NPAGE: self.selected[page]=min(len(labels)-1,index+max(1,self.screen.getmaxyx()[0]-7))
+                    elif key==curses.KEY_PPAGE: self.selected[page]=max(0,index-max(1,self.screen.getmaxyx()[0]-7))
                     elif key in ENTER:
                         self.screen.timeout(-1)
                         try: self.activate(page,index,items)

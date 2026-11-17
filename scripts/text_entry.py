@@ -43,7 +43,7 @@ def cursor(visible):
 def draw_box(screen,field):
     height,width=screen.getmaxyx()
     if height<3 or width<5: return
-    top=min(3,height-3)
+    top=min(4,height-3)
     left=2 if width>=12 else 0
     capacity=max(1,min(72,width-left-3))
     start=0

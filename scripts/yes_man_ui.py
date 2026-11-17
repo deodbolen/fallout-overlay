@@ -184,7 +184,7 @@ def fit_cli_portrait(width,height):
 def chat_panel(nav,messages,field,offset,status,native):
     screen=nav.screen; height,width=screen.getmaxyx()
     left=int(width*.35) if width>=60 else 1
-    right=width-2; top=3; bottom=height-4
+    right=width-2; top=4; bottom=height-4
     capacity=max(1,right-left-3); visible=max(1,bottom-top-5)
     nav.draw('YES MAN // CHAT',[],detail=status,refresh=False)
     attr=curses.color_pair(1)
