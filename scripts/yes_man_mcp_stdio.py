@@ -1,8 +1,12 @@
 """Explicitly owned MCP stdio subprocess lifecycle; no protocol handling."""
+from contextlib import contextmanager
 import json
+import math
 import os
+import select
 import subprocess
 import threading
+import time
 
 
 class StdioTransport:
@@ -31,6 +35,10 @@ class StdioTransport:
         self._env.update(dict(server.get('env', {})))
         self.process = None
         self._lock = threading.RLock()
+        self._receive_lock = threading.Lock()
+        self._receive_process = None
+        self._receive_buffer = bytearray()
+        self._receive_failed = False
 
     def start(self):
         """Launch explicitly, or return the already running owned process.
@@ -81,6 +89,110 @@ class StdioTransport:
                 pipe.flush()
             except (OSError, ValueError):
                 raise RuntimeError('Could not write to MCP server stdin; the pipe may be closed.') from None
+
+    def receive(self, timeout=10):
+        """Return one UTF-8 JSON dictionary with a whole-message deadline.
+
+        JSON payloads may contain at most 1 MiB, excluding the newline. Partial
+        lines survive timeouts; bytes after a newline remain for the next call.
+        Oversize input requires a process restart because framing is no longer
+        trusted. No stderr input, background readers, or message logging is used.
+        """
+        try:
+            if isinstance(timeout, bool) or not isinstance(timeout, (int, float)):
+                raise ValueError
+            timeout = float(timeout)
+            if not math.isfinite(timeout) or timeout <= 0:
+                raise ValueError
+        except (ValueError, OverflowError):
+            raise ValueError('MCP receive timeout must be a positive finite number.') from None
+        deadline = time.monotonic() + timeout
+
+        @contextmanager
+        def state_lock():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0 or not self._lock.acquire(timeout=min(remaining, threading.TIMEOUT_MAX)):
+                raise TimeoutError('Timed out waiting for the MCP transport.')
+            try:
+                yield
+            finally:
+                self._lock.release()
+
+        while not self._receive_lock.acquire(timeout=min(timeout, 0.1)):
+            timeout = deadline - time.monotonic()
+            if timeout <= 0:
+                raise TimeoutError('Timed out waiting for an MCP message.')
+        try:
+            with state_lock():
+                process = self.process
+                if process is None:
+                    raise RuntimeError('MCP stdio transport is not started or has closed.')
+                if self._receive_process is not process:
+                    self._receive_process = process
+                    self._receive_buffer.clear()
+                    self._receive_failed = False
+            limit = 1024 * 1024
+            while True:
+                with state_lock():
+                    if self.process is not process:
+                        raise RuntimeError('MCP stdio transport closed or restarted during receive.')
+                    pipe = process.stdout
+                    if pipe is None or pipe.closed:
+                        raise RuntimeError('MCP server stdout is unavailable.')
+                    if self._receive_failed:
+                        raise ValueError('MCP message exceeded 1 MiB; restart the transport before receiving again.')
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise TimeoutError('Timed out waiting for a complete MCP message.')
+                    newline = self._receive_buffer.find(b'\n')
+                    if newline >= 0:
+                        raw = bytes(self._receive_buffer[:newline])
+                        del self._receive_buffer[:newline + 1]
+                        break
+                    if len(self._receive_buffer) > limit:
+                        self._receive_buffer.clear()
+                        self._receive_failed = True
+                        raise ValueError('MCP message exceeds the 1 MiB limit.')
+                    descriptor = pipe.fileno()
+                try:
+                    readable, _, _ = select.select([descriptor], [], [], min(remaining, 0.1))
+                    with state_lock():
+                        if self.process is not process or pipe.closed:
+                            raise RuntimeError('MCP stdio transport closed or restarted during receive.')
+                        if not readable:
+                            if process.poll() is not None:
+                                raise RuntimeError('MCP server exited before completing a message.')
+                            continue
+                        blocking = os.get_blocking(descriptor)
+                        try:
+                            os.set_blocking(descriptor, False)
+                            chunk = os.read(descriptor, min(65536, limit + 1 - len(self._receive_buffer)))
+                        except BlockingIOError:
+                            continue
+                        finally:
+                            os.set_blocking(descriptor, blocking)
+                        if not chunk:
+                            raise RuntimeError('MCP server exited or closed stdout before completing a message.')
+                        self._receive_buffer.extend(chunk)
+                except TimeoutError:
+                    raise
+                except (OSError, ValueError):
+                    raise RuntimeError('Could not read MCP server stdout; the pipe may be closed.') from None
+            try:
+                text = raw.decode('utf-8')
+            except UnicodeError:
+                raise ValueError('MCP message contains invalid UTF-8.') from None
+            def reject_constant(value):
+                raise ValueError('Non-JSON numeric constant.')
+            try:
+                message = json.loads(text, parse_constant=reject_constant)
+            except (ValueError, RecursionError):
+                raise ValueError('MCP message contains invalid JSON.') from None
+            if not isinstance(message, dict):
+                raise ValueError('MCP message must be a JSON dictionary.')
+            return message
+        finally:
+            self._receive_lock.release()
 
     def close(self):
         """Terminate and reap the child, escalating after three seconds.
