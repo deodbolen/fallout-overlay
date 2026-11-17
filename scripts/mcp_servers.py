@@ -86,6 +86,35 @@ def remove_server(server_id):
         raise ValueError('MCP server ID was not found.')
 
 
+def update_server(server_id, changes):
+    """Validate and persist an updated server without changing its ID or order."""
+    if not isinstance(server_id, str) or not server_id.strip():
+        raise ValueError('MCP server ID must be a nonempty string.')
+    if not isinstance(changes, dict):
+        raise ValueError('MCP server changes must be a dictionary.')
+    server_id = server_id.strip()
+    if 'id' in changes and changes['id'] != server_id:
+        raise ValueError('MCP server ID cannot be changed.')
+    directory = config_dir()
+    directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with (directory / 'mcp-servers.lock').open('a') as lock:
+        os.fchmod(lock.fileno(), 0o600)
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        document = load()
+        for index, server in enumerate(document['servers']):
+            if validate_server(server)['id'] == server_id:
+                merged = dict(server)
+                merged.update(changes)
+                merged['id'] = server_id
+                normalized = validate_server(merged)
+                updated = dict(document)
+                updated['servers'] = list(document['servers'])
+                updated['servers'][index] = normalized
+                save(updated)
+                return normalized
+        raise ValueError('MCP server ID was not found.')
+
+
 def validate_server(server):
     """Return a normalized copy, without I/O or modifying the input.
 
