@@ -1,4 +1,5 @@
 """Explicitly owned MCP stdio subprocess lifecycle; no protocol handling."""
+import json
 import os
 import subprocess
 import threading
@@ -11,7 +12,7 @@ class StdioTransport:
     code may provide configuration and call start(); model-generated commands
     must never be passed here. The owner must call close() when finished.
     process exposes the three separate binary pipes for later protocol support.
-    No background readers or protocol messages are introduced here.
+    No background readers or automatic protocol messages are introduced here.
     """
 
     def __init__(self, server):
@@ -51,6 +52,35 @@ class StdioTransport:
                 stderr=subprocess.PIPE, env=dict(self._env), shell=False,
                 close_fds=True, start_new_session=True, **options)
             return self.process
+
+    def send(self, message):
+        """Write one compact UTF-8 JSON line without logging its contents."""
+        if not isinstance(message, dict):
+            raise ValueError('MCP message must be a dictionary.')
+        try:
+            data = (json.dumps(message, ensure_ascii=False, separators=(',', ':'),
+                               allow_nan=False) + '\n').encode('utf-8')
+        except (TypeError, ValueError, UnicodeError, RecursionError, OverflowError):
+            raise ValueError('MCP message could not be serialized as UTF-8 JSON.') from None
+        with self._lock:
+            process = self.process
+            if process is None:
+                raise RuntimeError('MCP stdio transport is not started or has closed.')
+            if process.poll() is not None:
+                raise RuntimeError('MCP server process has exited.')
+            pipe = process.stdin
+            if pipe is None or pipe.closed:
+                raise RuntimeError('MCP server stdin is unavailable.')
+            try:
+                remaining = memoryview(data)
+                while remaining:
+                    written = pipe.write(remaining)
+                    if written is None or written <= 0 or written > len(remaining):
+                        raise RuntimeError('MCP server stdin could not accept the complete message.')
+                    remaining = remaining[written:]
+                pipe.flush()
+            except (OSError, ValueError):
+                raise RuntimeError('Could not write to MCP server stdin; the pipe may be closed.') from None
 
     def close(self):
         """Terminate and reap the child, escalating after three seconds.
