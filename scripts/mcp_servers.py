@@ -66,6 +66,26 @@ def add_server(server):
         return normalized
 
 
+def remove_server(server_id):
+    """Remove and return one server under the shared configuration lock."""
+    if not isinstance(server_id, str) or not server_id.strip():
+        raise ValueError('MCP server ID must be a nonempty string.')
+    server_id = server_id.strip()
+    directory = config_dir()
+    directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with (directory / 'mcp-servers.lock').open('a') as lock:
+        os.fchmod(lock.fileno(), 0o600)
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        document = load()
+        for index, server in enumerate(document['servers']):
+            if validate_server(server)['id'] == server_id:
+                updated = dict(document)
+                updated['servers'] = document['servers'][:index] + document['servers'][index + 1:]
+                save(updated)
+                return server
+        raise ValueError('MCP server ID was not found.')
+
+
 def validate_server(server):
     """Return a normalized copy, without I/O or modifying the input.
 
