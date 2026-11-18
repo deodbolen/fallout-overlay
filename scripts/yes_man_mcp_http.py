@@ -131,3 +131,58 @@ class StreamableHttpTransport:
             # Never include server error messages/data, which may echo secrets.
             raise RuntimeError('MCP JSON-RPC request failed with error code ' + str(error['code']) + '.')
         return response['result']
+
+    def initialize(self, timeout=10):
+        """Negotiate MCP 2025-03-26 and notify only after valid negotiation."""
+        protocol_version = '2025-03-26'
+        result = self.request('initialize', {
+            'protocolVersion': protocol_version,
+            'capabilities': {},
+            'clientInfo': {'name': 'yes-man-mcp', 'version': '0.1.0'},
+        }, timeout=timeout)
+        if not isinstance(result, dict):
+            raise ValueError('Malformed MCP initialization result.')
+        if result.get('protocolVersion') != protocol_version:
+            raise ValueError('Unsupported MCP initialization protocol version.')
+        if not isinstance(result.get('capabilities'), dict):
+            raise ValueError('MCP initialization requires a capabilities object.')
+        server_info = result.get('serverInfo')
+        if (not isinstance(server_info, dict) or
+                any(not isinstance(server_info.get(field), str) or not server_info[field].strip()
+                    for field in ('name', 'version'))):
+            raise ValueError('MCP initialization requires serverInfo with nonempty name and version strings.')
+        headers = {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json, text/event-stream',
+            'MCP-Protocol-Version': protocol_version,
+        }
+        if self._bearer_token:
+            headers['Authorization'] = 'Bearer ' + self._bearer_token
+        try:
+            notification = Request(
+                self._url, data=b'{"jsonrpc":"2.0","method":"notifications/initialized"}',
+                headers=headers, method='POST')
+            with build_opener(_NoRedirect()).open(notification, timeout=timeout) as response:
+                if response.status != 202:
+                    raise RuntimeError('MCP initialized notification requires HTTP 202 Accepted.')
+                # Only an empty body is valid; read at most one byte to detect
+                # unexpected content without buffering an unbounded response.
+                if response.read(1):
+                    raise ValueError('MCP initialized notification response must have an empty body.')
+        except HTTPError as error:
+            code = error.code
+            error.close()
+            if 300 <= code < 400:
+                raise RuntimeError('MCP HTTP redirects are not allowed.') from None
+            raise RuntimeError('MCP initialized notification failed with HTTP status ' + str(code) + '.') from None
+        except TimeoutError:
+            raise TimeoutError('MCP initialized notification timed out.') from None
+        except URLError as error:
+            if isinstance(error.reason, TimeoutError):
+                raise TimeoutError('MCP initialized notification timed out.') from None
+            raise RuntimeError('Could not send the MCP initialized notification.') from None
+        except (OSError, HTTPException):
+            raise RuntimeError('MCP initialized notification connection failed.') from None
+        except (UnicodeError, OverflowError):
+            raise ValueError('MCP initialized notification could not be encoded.') from None
+        return result
