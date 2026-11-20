@@ -384,7 +384,7 @@ class Navigator:
 
     def switch_settings_page(self,key):
         if self.sections[self.section]!='⚙️' or key not in (curses.KEY_LEFT,curses.KEY_RIGHT): return False
-        self.settings_index=max(0,min(4,self.settings_index+(1 if key==curses.KEY_RIGHT else -1)))
+        self.settings_index=max(0,min(5,self.settings_index+(1 if key==curses.KEY_RIGHT else -1)))
         self.message=''
         self.sound('select')
         return True
@@ -485,8 +485,12 @@ class Navigator:
         if self.sections[self.section]=='⚙️':
             status='Enabled' if crt_settings.running() and crt_settings.enabled() else 'Disabled'
             animation='Enabled' if crt_settings.running() and crt_settings.animation_enabled() else 'Disabled'
-            tabs=('DISPLAY','AUDIO','CONTROLS','NETWORK','SYSTEM')
+            tabs=('DISPLAY','AUDIO','CONTROLS','NETWORK','SYSTEM','MCP Servers')
             title='SETTINGS // '+'   '.join('['+name+']' if i==self.settings_index else name for i,name in enumerate(tabs))
+            if tabs[self.settings_index]=='MCP Servers':
+                return 'mcp_servers',title,['MCP Servers',
+                    'Configure external MCP servers and manage their tools.',
+                    '', 'No MCP servers configured.'],[]
             groups=(
                 [('CRT overlay: '+status,0),('CRT scan animation: '+animation,1),
                  ('CRT effects and fan always on: '+('On' if crt_settings.always_on() else 'Off'),9),
@@ -1075,7 +1079,7 @@ class Navigator:
                     detail=(self.message or str(items[index][0])) if page=='home' else self.message
                     if page=='dashboard' and not detail:
                         detail='LIVE  |  '+datetime.now().strftime('%H:%M:%S')+'  |  '+str(index+1)+'–'+str(min(len(labels),index+max(1,self.screen.getmaxyx()[0]-7)))+' / '+str(len(labels))
-                    redraw=self.draw_clock if page=='clock' else lambda: self.draw(title,labels,index,detail=detail,highlight=page!='dashboard')
+                    redraw=self.draw_clock if page=='clock' else lambda: self.draw(title,labels,index,detail=detail,highlight=page not in ('dashboard','mcp_servers'))
                     if self.transition_pending:
                         self.transition_pending=False
                         animate_section(self.screen,redraw)

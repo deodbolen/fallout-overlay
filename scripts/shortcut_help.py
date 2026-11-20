@@ -23,7 +23,7 @@ def text(section, modifier='ctrl', title='', context=''):
         'TERMINAL': navigation + ['M   Session actions: history, select, copy or export plain text'],
         'INV': navigation + ['← / →   Switch Tool Belt / Applications',
                              'Ctrl+M or M   Launch / add / remove a Tool Belt favorite'],
-        'SETTINGS': navigation + ['← / →   Switch Display / Audio / Controls / Network / System',
+        'SETTINGS': navigation + ['← / →   Switch Display / Audio / Controls / Network / System / MCP Servers',
                                   '+ / −   Adjust the selected font or volume setting'],
         'SESSION': ['Ctrl+]   Return to navigator', 'Ctrl+↑ / ↓   Switch sessions',
                     'SSH TUI: F3 / F4 or Shift+Page Up / Down   Scroll retained history',
