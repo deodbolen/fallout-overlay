@@ -117,6 +117,12 @@ class Host:
         self.power_button.set_tooltip_text('Sleep, log out, restart or shut down')
         self.power_button.connect('clicked',self.open_power_menu)
         overlay.add_overlay(self.power_button)
+        self.mcp_add_button=Gtk.Button(label='Add Server')
+        self.mcp_add_button.set_halign(Gtk.Align.END); self.mcp_add_button.set_valign(Gtk.Align.END)
+        self.mcp_add_button.set_margin_end(16); self.mcp_add_button.set_margin_bottom(8)
+        self.mcp_add_button.set_no_show_all(True)
+        self.mcp_add_button.connect('clicked',self.open_add_mcp_server)
+        overlay.add_overlay(self.mcp_add_button)
         self.stack.connect('notify::visible-child-name',lambda *args: self.update_power_button())
         env=dict(os.environ,FALLOUT_EMBEDDED_SOCKET=str(path),TERM='xterm-256color')
         self.spawn(self.navigator,[sys.executable,str(ROOT/'scripts/browser.py')],str(Path.home()),env,self.nav_spawned)
@@ -128,6 +134,74 @@ class Host:
 
     def update_power_button(self):
         self.power_button.set_visible(self.shortcut_context['section']==0 and self.stack.get_visible_child_name()=='navigator')
+        self.mcp_add_button.set_visible(self.shortcut_context['section']==5 and
+            self.shortcut_context['title']=='MCP Servers' and self.stack.get_visible_child_name()=='navigator')
+
+    def open_add_mcp_server(self,button):
+        """GUI-only configuration preview; no persistence or connections."""
+        dialog=Gtk.Dialog(title='Add MCP Server',transient_for=self.window,modal=True)
+        dialog.set_name('mcp-server-dialog')
+        dialog.set_default_size(540,320)
+        dialog.add_button('Cancel',Gtk.ResponseType.CANCEL)
+        add=dialog.add_button('Add',Gtk.ResponseType.OK)
+        add.set_sensitive(False)
+        dialog.set_default_response(Gtk.ResponseType.CANCEL)
+        css=Gtk.CssProvider()
+        css.load_from_data(b'''
+            #mcp-server-dialog { background: #09110b; color: #b6ffa3; }
+            #mcp-server-dialog label { color: #b6ffa3; font-family: "DejaVu Sans Mono"; }
+            #mcp-server-dialog entry, #mcp-server-dialog button {
+                background: #14291a; color: #b6ffa3; border: 1px solid #537c43;
+            }
+            #mcp-server-dialog entry:focus { border-color: #9dff72; }
+            #mcp-server-dialog button:disabled { color: #58704c; border-color: #30432a; }
+        ''')
+        def style(widget):
+            widget.get_style_context().add_provider(css,Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+            if isinstance(widget,Gtk.Container):
+                for child in widget.get_children(): style(child)
+        grid=Gtk.Grid(column_spacing=16,row_spacing=12)
+        grid.set_margin_start(20); grid.set_margin_end(20)
+        grid.set_margin_top(16); grid.set_margin_bottom(16)
+        dialog.get_content_area().pack_start(grid,True,True,0)
+        def row(number,title,widget,conditional=False):
+            label=Gtk.Label(label=title); label.set_xalign(0)
+            widget.set_hexpand(True)
+            if conditional:
+                label.set_no_show_all(True); widget.set_no_show_all(True)
+            grid.attach(label,0,number,1,1); grid.attach(widget,1,number,1,1)
+            return label,widget
+        name=Gtk.Entry()
+        row(0,'Server name',name)
+        transport=Gtk.ComboBoxText()
+        transport.append('streamable-http','Streamable HTTP')
+        transport.append('stdio','stdio')
+        transport.set_active_id('streamable-http')
+        row(1,'Transport type',transport)
+        endpoint=Gtk.Entry(); endpoint.set_placeholder_text('https://server.example/mcp')
+        token=Gtk.Entry(); token.set_visibility(False)
+        token.set_placeholder_text('Optional')
+        command=Gtk.Entry(); command.set_placeholder_text('/path/to/executable')
+        arguments=Gtk.Entry(); arguments.set_placeholder_text('--option value')
+        http_rows=[row(2,'Endpoint URL',endpoint,True),row(3,'Bearer token',token,True)]
+        stdio_rows=[row(4,'Executable command',command,True),row(5,'Arguments',arguments,True)]
+        explanation=Gtk.Label(label='Saving will be implemented next. Add is disabled.')
+        explanation.set_line_wrap(True); explanation.set_xalign(0)
+        grid.attach(explanation,0,6,2,1)
+        def show_transport(*args):
+            http=transport.get_active_id()=='streamable-http'
+            for pair in http_rows:
+                for widget in pair: widget.set_visible(http)
+            for pair in stdio_rows:
+                for widget in pair: widget.set_visible(not http)
+        transport.connect('changed',show_transport)
+        style(dialog)
+        dialog.show_all(); show_transport(); name.grab_focus()
+        try: dialog.run()
+        finally:
+            token.set_text('')
+            dialog.destroy()
+            if not self.closed: self.navigator.grab_focus()
 
     def open_power_menu(self,button):
         # Use XFCE's session dialog so power actions follow the desktop's policies.
