@@ -266,12 +266,91 @@ def mcp_server_actions(nav,server_id):
         except (OSError,ValueError,TypeError,AttributeError,KeyError,RecursionError):
             nav.message='Could not read the selected MCP server configuration.'
             return None
-        choice=nav.menu('MCP SERVER // '+server['name'],['Edit Server','Test Connection','Back'],detail=nav.message)
-        if choice is None or choice==2: return None
+        choice=nav.menu('MCP SERVER // '+server['name'],['Edit Server','Test Connection','Discover Tools','Back'],detail=nav.message)
+        if choice is None or choice==3: return None
         if choice==0:
             changed=add_mcp_server_form(nav,server)
             if changed is not None: return changed
         elif choice==1: test_mcp_connection(nav,server_id)
+        elif choice==2: discover_mcp_tools(nav,server_id)
+
+
+def discover_mcp_tools(nav,server_id):
+    from mcp_servers import load, validate_server
+    active=getattr(nav,'mcp_tool_discovery',None)
+    if active and not active['done'].is_set():
+        nav.message='MCP tool discovery is already running.'
+        return
+    try:
+        server=next((validate_server(row) for row in load()['servers'] if row.get('id')==server_id),None)
+        if server is None: raise ValueError
+    except (OSError,ValueError,TypeError,AttributeError,KeyError,RecursionError):
+        nav.message='Could not read the saved MCP server configuration.'
+        return
+    state={'done':threading.Event(),'result':None,'context':RequestContext()}
+    nav.mcp_tool_discovery=state
+    def work(server=server,state=state):
+        try:
+            from yes_man_mcp_test import run_discovery
+            state['result']=run_discovery(server,context=state['context'])
+        except Exception:
+            state['result']={'ok':False,'error':'Could not complete MCP tool discovery.'}
+        finally: state['done'].set()
+    try: threading.Thread(target=work,daemon=True).start()
+    except RuntimeError:
+        state['done'].set()
+        nav.message='Could not start MCP tool discovery.'
+        return
+    nav.screen.timeout(100)
+    try:
+        while not state['done'].is_set():
+            nav.draw('DISCOVER MCP TOOLS',[server['name'],'Initializing and listing tools…'],
+                     detail='Timeout: 20 seconds plus bounded cleanup. Esc: Cancel.',highlight=False)
+            try: key=nav.menu_key()
+            except curses.error: continue
+            if key in ('\x1b','\x1d',curses.KEY_BACKSPACE,'\x7f'): return
+        result=state['result']
+        if state['context'].is_cancelled(): return
+        if not result['ok']:
+            lines=wrap_chat_line(result['error'],max(1,nav.screen.getmaxyx()[1]-2))
+            nav.screen.timeout(-1)
+            nav.menu('MCP DISCOVERY FAILED',lines+['Back'])
+            return
+        # Display only names/descriptions. Ignore permission-like fields supplied
+        # by the server; grants come exclusively from saved local configuration.
+        permissions=server.get('tool_permissions',{})
+        secrets=[value for value in [server.get('bearer_token',''),*server.get('env',{}).values()] if value]
+        def display(value):
+            for secret_value in sorted(secrets,key=len,reverse=True):
+                value=value.replace(secret_value,'[redacted]')
+            return ''.join(char if char.isprintable() else ' ' for char in value)
+        offset=0
+        nav.screen.timeout(-1)
+        while True:
+            width=max(1,nav.screen.getmaxyx()[1]-2)
+            lines=[]
+            for tool in result['tools']:
+                enabled=permissions.get(tool['name'],{}).get('enabled') is True
+                lines.extend(wrap_chat_line(display(tool['name'])+' // '+
+                             ('Enabled (saved permission)' if enabled else 'Disabled'),width))
+                lines.extend(wrap_chat_line(display(tool['description']) or '(No description provided.)',width))
+                lines.append('')
+            if not lines: lines=['No tools returned by this MCP server.']
+            visible=max(1,nav.screen.getmaxyx()[0]-7)
+            offset=max(0,min(offset,max(0,len(lines)-visible)))
+            nav.draw('MCP TOOLS // '+server['name'],lines,offset,highlight=False,
+                     detail='Read only. No tools executed or permissions changed. Esc: Back.')
+            key=nav.menu_key()
+            if key in ('\x1b','\x1d','\x7f',curses.KEY_BACKSPACE,'q','Q','\n','\r',curses.KEY_ENTER): return
+            if key in (curses.KEY_DOWN,'j'): offset+=1
+            elif key in (curses.KEY_UP,'k'): offset-=1
+            elif key==curses.KEY_NPAGE: offset+=visible
+            elif key==curses.KEY_PPAGE: offset-=visible
+            elif key==curses.KEY_HOME: offset=0
+            elif key==curses.KEY_END: offset=max(0,len(lines)-visible)
+    finally:
+        state['context'].cancel()
+        nav.screen.timeout(-1)
 
 
 def test_mcp_connection(nav,server_id):
