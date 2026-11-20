@@ -324,33 +324,89 @@ def discover_mcp_tools(nav,server_id):
             for secret_value in sorted(secrets,key=len,reverse=True):
                 value=value.replace(secret_value,'[redacted]')
             return ''.join(char if char.isprintable() else ' ' for char in value)
-        offset=0
+        offset=0; selected=0
         nav.screen.timeout(-1)
+        tools=result['tools']
+        def permission_label(name):
+            permission=permissions.get(name,{})
+            if permission.get('enabled') is not True: return 'Disabled'
+            return 'Always Allow' if permission.get('approval')=='always_allow' else 'Always Ask'
         while True:
             width=max(1,nav.screen.getmaxyx()[1]-2)
-            lines=[]
-            for tool in result['tools']:
-                enabled=permissions.get(tool['name'],{}).get('enabled') is True
-                lines.extend(wrap_chat_line(display(tool['name'])+' // '+
-                             ('Enabled (saved permission)' if enabled else 'Disabled'),width))
+            lines=[]; headers=[]
+            for tool in tools:
+                heading=wrap_chat_line(display(tool['name'])+' // '+permission_label(tool['name']),width)
+                headers.append((len(lines),len(heading)))
+                lines.extend(heading)
                 lines.extend(wrap_chat_line(display(tool['description']) or '(No description provided.)',width))
                 lines.append('')
             if not lines: lines=['No tools returned by this MCP server.']
             visible=max(1,nav.screen.getmaxyx()[0]-7)
             offset=max(0,min(offset,max(0,len(lines)-visible)))
-            nav.draw('MCP TOOLS // '+server['name'],lines,offset,highlight=False,
-                     detail='Read only. No tools executed or permissions changed. Esc: Back.')
+            nav.draw('MCP TOOLS // '+server['name'],lines,offset,highlight=False,refresh=False,
+                     detail='Up/Down: select tool. Enter: permissions. Page Up/Down: scroll. Esc: Back.')
+            if tools:
+                start,count=headers[selected]
+                for index in range(start,start+count):
+                    if offset<=index<offset+visible:
+                        nav.put(4+index-offset,lines[index],curses.A_REVERSE)
+            nav.screen.refresh()
             key=nav.menu_key()
-            if key in ('\x1b','\x1d','\x7f',curses.KEY_BACKSPACE,'q','Q','\n','\r',curses.KEY_ENTER): return
-            if key in (curses.KEY_DOWN,'j'): offset+=1
-            elif key in (curses.KEY_UP,'k'): offset-=1
+            if key in ('\x1b','\x1d','\x7f',curses.KEY_BACKSPACE,'q','Q'): return
+            if key in ('\n','\r',curses.KEY_ENTER):
+                if not tools: return
+                saved=mcp_tool_permission_menu(nav,server,tools[selected],display)
+                if saved is not None:
+                    permissions[saved['tool_name']]={'enabled':saved['enabled'],'approval':saved['approval']}
+            elif key in (curses.KEY_DOWN,'j') and tools:
+                selected=min(len(tools)-1,selected+1); offset=headers[selected][0]
+            elif key in (curses.KEY_UP,'k') and tools:
+                selected=max(0,selected-1); offset=headers[selected][0]
             elif key==curses.KEY_NPAGE: offset+=visible
             elif key==curses.KEY_PPAGE: offset-=visible
-            elif key==curses.KEY_HOME: offset=0
-            elif key==curses.KEY_END: offset=max(0,len(lines)-visible)
+            elif key==curses.KEY_HOME: selected=0; offset=0
+            elif key==curses.KEY_END:
+                selected=max(0,len(tools)-1); offset=headers[selected][0] if tools else 0
     finally:
         state['context'].cancel()
         nav.screen.timeout(-1)
+
+
+def mcp_tool_permission_menu(nav,server,tool,display):
+    from mcp_servers import load, validate_server, validate_tool_permission, set_tool_permission
+    try:
+        current=next((validate_server(row) for row in load()['servers'] if row.get('id')==server['id']),None)
+        if current is None: raise ValueError
+        identity_fields=('transport','url','bearer_token','command','args','env','cwd')
+        if any(current.get(field)!=server.get(field) for field in identity_fields):
+            nav.menu('MCP TOOL PERMISSIONS',['Server connection changed. Discover tools again.','Back'])
+            return None
+        permission=validate_tool_permission(dict(current['tool_permissions'].get(tool['name'],{}),tool_name=tool['name']))
+    except (OSError,ValueError,TypeError,AttributeError,KeyError,RecursionError):
+        nav.menu('MCP TOOL PERMISSIONS',['Could not read saved tool permissions.','Back'])
+        return None
+    configured=0 if not permission['enabled'] else 2 if permission['approval']=='always_allow' else 1
+    selected=configured
+    error=''
+    states=('Disabled','Always Ask','Always Allow')
+    while True:
+        labels=[('[current] ' if index==configured else '          ')+label for index,label in enumerate(states)]+['Back']
+        nav.draw('TOOL PERMISSION // '+display(tool['name']),labels,selected,
+                 detail=error or 'Future execution only. This does not enable the server or run the tool.')
+        key=nav.menu_key()
+        if key in ('\x1b','\x1d','\x7f',curses.KEY_BACKSPACE,'q','Q'): return None
+        if key in (curses.KEY_UP,'k'): selected=max(0,selected-1)
+        elif key in (curses.KEY_DOWN,'j'): selected=min(3,selected+1)
+        elif key in ('\n','\r',curses.KEY_ENTER):
+            if selected==3: return None
+            choice=validate_tool_permission({'tool_name':tool['name'],'enabled':selected!=0,
+                                            'approval':'always_allow' if selected==2 else 'always_ask'})
+            try:
+                return set_tool_permission(server['id'],choice,expected_server=server)
+            except ValueError:
+                error='Could not save permissions. The configuration may have changed; rediscover if needed.'
+            except (OSError,TypeError,KeyError,RecursionError):
+                error='Could not save permissions. Check configuration access and disk space.'
 
 
 def test_mcp_connection(nav,server_id):

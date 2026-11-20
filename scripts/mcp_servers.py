@@ -124,6 +124,38 @@ def update_server(server_id, changes):
         raise ValueError('MCP server ID was not found.')
 
 
+def set_tool_permission(server_id, permission, *, expected_server=None):
+    """Atomically update one server-scoped tool grant without changing identity."""
+    if not isinstance(server_id, str) or not server_id.strip():
+        raise ValueError('MCP server ID must be a nonempty string.')
+    server_id = server_id.strip()
+    normalized = validate_tool_permission(permission)
+    expected = validate_server(expected_server) if expected_server is not None else None
+    directory = config_dir()
+    directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with (directory / 'mcp-servers.lock').open('a') as lock:
+        os.fchmod(lock.fileno(), 0o600)
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        document = load()
+        for index, record in enumerate(document['servers']):
+            server = validate_server(record)
+            if server['id'] != server_id:
+                continue
+            identity_fields = ('id', 'transport', 'url', 'bearer_token', 'command', 'args', 'env', 'cwd')
+            if expected is not None and any(server.get(field) != expected.get(field) for field in identity_fields):
+                raise ValueError('Server connection changed. Discover tools again before editing permissions.')
+            permissions = dict(server['tool_permissions'])
+            permissions[normalized['tool_name']] = {
+                'enabled': normalized['enabled'], 'approval': normalized['approval']}
+            server['tool_permissions'] = permissions
+            updated = dict(document)
+            updated['servers'] = list(document['servers'])
+            updated['servers'][index] = server
+            save(updated)
+            return normalized
+        raise ValueError('MCP server ID was not found.')
+
+
 def validate_server(server):
     """Return a normalized copy, without I/O or modifying the input.
 
@@ -232,4 +264,5 @@ def validate_tool_permission(permission):
     approval = permission.get('approval', 'always_ask')
     if approval not in ('always_ask', 'always_allow'):
         raise ValueError('MCP tool approval must be always_ask or always_allow.')
-    return {'tool_name': tool_name.strip(), 'enabled': enabled, 'approval': approval}
+    # MCP names are exact protocol identifiers, not display names to trim.
+    return {'tool_name': tool_name, 'enabled': enabled, 'approval': approval}
