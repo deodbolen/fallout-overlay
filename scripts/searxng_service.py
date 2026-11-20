@@ -1,5 +1,4 @@
 """Installer-managed, rootless local SearXNG service for Yes Man."""
-import json
 import os
 from pathlib import Path
 import secrets
@@ -7,7 +6,7 @@ import subprocess
 import time
 from urllib.request import urlopen
 from urllib.error import URLError
-from ssh_manager import config_dir, state_dir, atomic_json
+from ssh_manager import config_dir, state_dir
 
 URL='http://127.0.0.1:8888'
 IMAGE='docker.io/searxng/searxng:latest'
@@ -47,17 +46,12 @@ def unit_path():
 
 
 def migrate_settings():
-    """Fill only missing/local-default search addresses; never overwrite choices."""
-    path=config_dir()/'yes-man.json'
-    if not path.exists(): return
-    data=json.loads(path.read_text())
-    if not isinstance(data,dict): raise ValueError('Invalid Yes Man configuration.')
-    records=[data]+list(data.get('profiles',{}).values())
-    for record in records:
-        if not isinstance(record,dict): raise ValueError('Invalid Yes Man profile.')
-        if not record.get('search_url'): record['search_url']=URL
-        record.setdefault('search_enabled',True)
-    atomic_json(path,data)
+    """Preserve the active legacy search choices in the independent tool file."""
+    from yes_man_tool_settings import settings, save
+    if (config_dir()/'yes-man-tools.json').exists(): return
+    config=settings()
+    if not config['search_url']: config['search_url']=URL
+    save(config)
 
 
 def install():

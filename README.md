@@ -128,13 +128,14 @@ Metrics refresh every two seconds; screen width is checked at most once a minute
 ### Yes Man
 
 Yes Man is built into **INV → Tool Belt** in both the desktop navigator and SSH TUI.
-Choose **Configure LLM server** (also available from its M menu), select **OpenAI
+Open **Settings → LLM Connections → Connection settings**, select **OpenAI
 compatible** or **Ollama**, enter the server address and model name, and optionally
 set an API key. OpenAI-compatible addresses can include `/v1`; Ollama addresses
 can include `/api`. Examples: `http://192.168.1.20:1234/v1` or
 `http://192.168.1.20:11434`. Localhost means the machine running Fallout, including
-when you use Fallout over SSH. Save, then open Chat and press **N** to write.
-Use the arrows or Page Up/Down to read replies; Escape returns to the menu.
+when you use Fallout over SSH. Save, then open Yes Man → Chat to write.
+Type in the persistent message box and press Enter to send. Use the arrows or
+Page Up/Down to read replies; Escape returns to the navigator.
 
 Configuration is saved per user in `yes-man.json` in Fallout's configuration
 folder with owner-only file permissions. API keys are masked during entry.
@@ -147,8 +148,9 @@ The adapters use [Ollama's chat API](https://docs.ollama.com/api/chat) and the
 
 #### Yes Man web search
 
-In **Yes Man → Configure LLM server**, enter your **SearXNG address** (the server
-base URL or its `/search` URL), set **Web search: On**, then Save or Save as profile.
+In **Settings → Tools → Web search**, enter your **SearXNG address** (the server
+base URL or its `/search` URL), set **Web search: On**, then Save. These settings
+are shared by all LLM profiles.
 New configurations use the installer-managed local search service by default. Custom SearXNG instances must enable `json`
 in `search.formats`; see its [search API documentation](https://docs.searxng.org/dev/search_api.html).
 The search server is contacted by the machine running Fallout, including over SSH.
@@ -181,8 +183,9 @@ is documented [here](https://docs.searxng.org/admin/installation-docker).
 The service starts with your user session and restarts on failure; it is not
 exposed on your LAN. No Docker group membership or root container daemon is used.
 Existing custom search addresses and explicit search-off choices are preserved.
-Missing search addresses in existing configurations/profiles are filled with the
-local URL. To use a previously disabled profile, turn Web search On and save it.
+The active legacy search choices are preserved in `yes-man-tools.json` on
+installation, without rewriting LLM profiles. Missing search addresses use the
+local URL. Explicit search-off choices remain off.
 SSH TUI users on that same machine can use this service while the user service is
 running. A terminal-only machine can install the same Debian Podman dependencies
 and run `/usr/bin/python3 scripts/searxng_service.py install` as a normal user with
@@ -223,3 +226,19 @@ redirect checks, size limits, and timeouts documented in
 [yes-man-retrieval.md](docs/yes-man-retrieval.md). No dependencies or UI controls
 are added. All network work stays in the existing chat worker so Escape remains
 available while the server, search service, or article fetch is pending.
+
+
+### Connection settings and tool settings
+
+**Settings → LLM Connections** manages connection details, API keys, TLS, connection
+tests, and saved LLM profiles. **Settings → Tools** contains **Web search** and the
+**MCP Servers** placeholder. The selected Settings tab remains visible on narrow
+terminals. MCP connection/management controls are not introduced by this layout.
+
+Yes Man's own menu contains Chat, New conversation, and Select LLM profile.
+New LLM profiles store connection fields only. Existing profiles remain readable,
+but their legacy search fields are ignored when selected. Selecting a profile
+never changes web-search settings or `mcp-servers.json`. Tool settings are stored
+separately in the private `yes-man-tools.json` file; when absent, the previously
+active search values in `yes-man.json` provide a non-destructive compatibility
+fallback. Saving Tools writes the independent file and leaves model profiles alone.

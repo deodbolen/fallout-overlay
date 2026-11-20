@@ -17,19 +17,18 @@ class SearxngServiceTests(unittest.TestCase):
         self.assertNotIn('--privileged',text)
 
     def test_migration_preserves_existing_choices_and_profiles(self):
-        with tempfile.TemporaryDirectory() as folder, patch('searxng_service.config_dir',return_value=Path(folder)):
+        with tempfile.TemporaryDirectory() as folder, patch('searxng_service.config_dir',return_value=Path(folder)), patch('yes_man_tool_settings.config_dir',return_value=Path(folder)):
             path=Path(folder)/'yes-man.json'
             path.write_text(json.dumps({'model':'FortiLab','api_key':'secret','search_url':'https://custom',
                 'search_enabled':False,'profiles':{'old':{'model':'a'},
                 'custom':{'search_url':'https://custom','search_enabled':False}}}))
+            before=path.read_bytes()
             service.migrate_settings()
-            result=json.loads(path.read_text())
+            self.assertEqual(path.read_bytes(),before)
+            result=json.loads((Path(folder)/'yes-man-tools.json').read_text())
             self.assertEqual(result['search_url'],'https://custom')
             self.assertFalse(result['search_enabled'])
-            self.assertEqual(result['api_key'],'secret')
-            self.assertEqual(result['profiles']['old']['search_url'],service.URL)
-            self.assertTrue(result['profiles']['old']['search_enabled'])
-            self.assertFalse(result['profiles']['custom']['search_enabled'])
+            self.assertEqual(set(result),{'search_url','search_enabled'})
 
     def test_install_is_repeatable_and_restore_stops_only_owned_service(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -38,6 +37,7 @@ class SearxngServiceTests(unittest.TestCase):
                 return Mock(stdout='docker.io/searxng/searxng@sha256:abc\n')
             response=MagicMock(); response.__enter__.return_value.read.return_value=b'OK'
             with patch('searxng_service.config_dir',return_value=config), \
+                 patch('yes_man_tool_settings.config_dir',return_value=config), \
                  patch('searxng_service.state_dir',return_value=state), \
                  patch('searxng_service.unit_path',return_value=unit), \
                  patch('searxng_service.os.geteuid',return_value=1000), \

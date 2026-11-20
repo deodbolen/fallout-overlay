@@ -7,6 +7,7 @@ from functools import lru_cache
 import threading
 import re
 import yes_man
+import yes_man_tool_settings
 from yes_man_request import RequestContext, RequestCancelled
 from navigator_input import read_key
 from text_entry import TextField, draw_box, cursor, cells
@@ -29,7 +30,7 @@ def secret(nav):
     field=TextField(); cursor(True)
     try:
         while True:
-            nav.draw('YES MAN // API KEY',[],detail='Enter a replacement key. Empty clears it. Esc keeps the saved key.')
+            nav.draw('LLM CONNECTION // API KEY',[],detail='Enter a replacement key. Empty clears it. Esc keeps the saved key.')
             masked=TextField('*'*len(field.value)); masked.position=field.position
             draw_box(nav.screen,masked)
             key=read_key(nav.screen)
@@ -42,12 +43,12 @@ def secret(nav):
 def configure(nav):
     config=yes_man.settings()
     while True:
-        choice=nav.menu('YES MAN // SERVER'+(' // '+yes_man.active_profile() if yes_man.active_profile() else ''),[
+        choice=nav.menu('SETTINGS // LLM CONNECTIONS'+(' // '+yes_man.active_profile() if yes_man.active_profile() else ''),[
             'Server type: '+config['protocol'],'Server address: '+config['url'],
             'Model: '+(config['model'] or '(required)'),
-            'API key: '+('Saved' if config['api_key'] else 'None'), 'Save','Test connection','Verify TLS certificate: '+('On' if config['verify_tls'] else 'Off'),'Save as profile','Select profile','Web search: '+('On' if config['search_enabled'] else 'Off'),'SearXNG address: '+(config['search_url'] or '(not configured)'),'Cancel'],
+            'API key: '+('Saved' if config['api_key'] else 'None'), 'Save','Test connection','Verify TLS certificate: '+('On' if config['verify_tls'] else 'Off'),'Save as profile','Select profile','Cancel'],
             detail=nav.message or 'Use your LLM API address. Localhost refers to the machine running Fallout.')
-        if choice is None or choice==11: return
+        if choice is None or choice==9: return
         if choice==0:
             kind=nav.menu('SERVER TYPE',['OpenAI compatible','Ollama','Cancel'])
             if kind in (0,1):
@@ -56,19 +57,15 @@ def configure(nav):
                     config['url']='http://localhost:11434' if kind==1 else yes_man.DEFAULT['url']
         elif choice in (1,2,3):
             field=('url','model','api_key')[choice-1]
-            value=secret(nav) if choice==3 else nav.text('YES MAN // '+field.upper(),config[field])
+            value=secret(nav) if choice==3 else nav.text('LLM CONNECTION // '+field.upper(),config[field])
             if value is not None: config[field]=value
         elif choice==4:
             try:
                 if config!=yes_man.settings(): nav.yes_man_messages=[]
-                yes_man.save(config); nav.message='Yes Man server saved.'; return
+                yes_man.save(config); nav.message='LLM connection saved.'; return
             except ValueError as error: nav.message=str(error)
         elif choice==5: test_connection(nav,config)
         elif choice==6: config['verify_tls']=not config['verify_tls']
-        elif choice==9: config['search_enabled']=not config['search_enabled']
-        elif choice==10:
-            value=nav.text('SEARXNG SERVER ADDRESS',config['search_url'])
-            if value is not None: config['search_url']=value
         elif choice==7:
             name=nav.text('SAVE LLM PROFILE AS')
             if name is None: continue
@@ -80,15 +77,53 @@ def configure(nav):
                 nav.message='Profile saved and selected: '+name.strip()
             except (OSError,ValueError) as error: nav.message=str(error)
         elif choice==8:
+            selected=select_profile(nav)
+            if selected is not None: config=selected
+
+
+def select_profile(nav):
+    try:
+        names=yes_man.profiles()
+        if not names:
+            nav.message='No profiles saved. Use Settings > LLM Connections first.'; return None
+        selected=nav.menu('SELECT LLM PROFILE',names+['Cancel'])
+        if selected is None or selected==len(names): return None
+        config=yes_man.select_profile(names[selected])
+        nav.yes_man_messages=[]
+        nav.message='Active profile saved: '+names[selected]
+        return config
+    except (OSError,ValueError) as error:
+        nav.message=str(error)
+        return None
+
+
+def configure_tools(nav):
+    config=yes_man_tool_settings.settings()
+    while True:
+        choice=nav.menu('SETTINGS // TOOLS // WEB SEARCH',[
+            'Web search: '+('On' if config['search_enabled'] else 'Off'),
+            'SearXNG address: '+(config['search_url'] or '(not configured)'), 'Save','Cancel'],
+            detail=nav.message or 'Shared by all LLM profiles.')
+        if choice is None or choice==3: return
+        if choice==0: config['search_enabled']=not config['search_enabled']
+        elif choice==1:
+            value=nav.text('SEARXNG SERVER ADDRESS',config['search_url'])
+            if value is not None: config['search_url']=value
+        elif choice==2:
             try:
-                names=yes_man.profiles()
-                if not names: nav.message='No saved profiles. Use Save as profile first.'; continue
-                selected=nav.menu('SELECT LLM PROFILE',names+['Cancel'])
-                if selected is None or selected==len(names): continue
-                config=yes_man.select_profile(names[selected])
+                yes_man_tool_settings.save(config)
                 nav.yes_man_messages=[]
-                nav.message='Active profile saved: '+names[selected]
+                nav.message='Web-search settings saved for all LLM profiles.'
+                return
             except (OSError,ValueError) as error: nav.message=str(error)
+
+
+def mcp_servers_panel(nav):
+    while True:
+        nav.draw('MCP Servers',['Configure external MCP servers and manage their tools.',
+                 '', 'No MCP servers configured.'],highlight=False)
+        key=nav.menu_key()
+        if key in ('\x1b','\x7f',curses.KEY_BACKSPACE,'q','Q','\n','\r',curses.KEY_ENTER): return
 
 
 
@@ -106,7 +141,7 @@ def test_connection(nav,config):
     frame=0
     try:
         while not done.is_set():
-            nav.draw('YES MAN // TEST CONNECTION',
+            nav.draw('LLM CONNECTION // TEST CONNECTION',
                      ['Checking server and model'+'.'*(frame%3+1),yes_man.endpoint(config),config['model']],
                      detail='Sending a short test message. Esc returns to settings.',highlight=False)
             frame+=1
@@ -121,11 +156,11 @@ def test_connection(nav,config):
 def run(nav):
     if not hasattr(nav,'yes_man_messages'): nav.yes_man_messages=[]
     while True:
-        choice=nav.menu('YES MAN // PERSONAL ASSISTANT',['Chat','Configure LLM server','New conversation','Back'],
+        choice=nav.menu('YES MAN // PERSONAL ASSISTANT',['Chat','New conversation','Select LLM profile','Back'],
                         detail=nav.message or 'Yes Man is ready to help!')
         if choice is None or choice==3: return
-        if choice==1: configure(nav)
-        elif choice==2: nav.yes_man_messages=[]; nav.message='New conversation started.'
+        if choice==1: nav.yes_man_messages=[]; nav.message='New conversation started.'
+        elif choice==2: select_profile(nav)
         else:
             chat(nav)
             return
@@ -236,7 +271,9 @@ def chat_panel(nav,messages,field,offset,status,native):
 def chat(nav):
     config=yes_man.settings()
     try: yes_man.validate(config)
-    except ValueError: configure(nav); return
+    except ValueError:
+        nav.message='Configure a connection under Settings > LLM Connections.'
+        return
     messages=nav.yes_man_messages; offset=10**9
     status='Enter: Send   ↑↓: Scroll   Esc: Back'
     field=TextField()

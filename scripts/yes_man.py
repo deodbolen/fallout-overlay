@@ -8,9 +8,11 @@ from urllib.error import HTTPError, URLError
 from ssh_manager import config_dir, atomic_json
 from yes_man_request import RequestContext
 from yes_man_tools import ToolRegistry
+import yes_man_tool_settings
 
 APP={'name':'Yes Man','path':'builtin:yes-man','builtin':'yes-man','terminal':True,'exec':''}
 DEFAULT={'protocol':'OpenAI compatible','url':'http://localhost:11434/v1','model':'','api_key':'','verify_tls':True,'search_enabled':True,'search_url':'http://127.0.0.1:8888'}
+CONNECTION_FIELDS=('protocol','url','model','api_key','verify_tls')
 SYSTEM=Path(__file__).with_name('yes_man_prompt.txt').read_text(encoding='utf-8').strip()
 
 
@@ -18,8 +20,9 @@ def settings():
     try:
         data=json.loads((config_dir()/'yes-man.json').read_text())
         result={key:data.get(key,value) if isinstance(data.get(key,value),type(value)) else value for key,value in DEFAULT.items()}
-        return result
-    except (OSError,ValueError,AttributeError): return dict(DEFAULT)
+    except (OSError,ValueError,AttributeError): result=dict(DEFAULT)
+    result.update(yes_man_tool_settings.settings())
+    return result
 
 
 def validate(config):
@@ -59,12 +62,19 @@ def active_profile():
     return name if name in document.get('profiles',{}) else ''
 
 
+def _connection_settings(config):
+    # LLM edits cannot change or depend on separately configured tool settings.
+    validated=validate(dict(config,**yes_man_tool_settings.DEFAULT))
+    return {key:validated[key] for key in CONNECTION_FIELDS}
+
+
 def save(config):
-    config=validate(config)
+    config=_connection_settings(config)
     document=_profile_document()
     document.update(config)
     active=document.get('active_profile','')
-    if document.get('profiles',{}).get(active)!=config: document['active_profile']=''
+    selected=document.get('profiles',{}).get(active)
+    if selected is None or _connection_settings(selected)!=config: document['active_profile']=''
     atomic_json(config_dir()/'yes-man.json',document)
 
 
@@ -73,7 +83,7 @@ def save_profile(name,config,*,overwrite=False):
     name=name.strip()
     if not name or len(name)>64 or not all(char.isprintable() for char in name):
         raise ValueError('Use a profile name of 1–64 printable characters.')
-    config=validate(config)
+    config=_connection_settings(config)
     document=_profile_document()
     saved=document.setdefault('profiles',{})
     if name in saved and not overwrite: raise ValueError('Profile already exists.')
@@ -87,11 +97,11 @@ def select_profile(name):
     document=_profile_document()
     saved=document.get('profiles',{})
     if name not in saved: raise ValueError('Profile is no longer available.')
-    config=validate(saved[name])
+    config=_connection_settings(saved[name])
     document.update(config)
     document['active_profile']=name
     atomic_json(config_dir()/'yes-man.json',document)
-    return config
+    return settings()
 
 
 

@@ -20,7 +20,7 @@ class YesManTests(unittest.TestCase):
         self.assertEqual(wrap_chat_line('',10),[''])
 
     def test_profiles_round_trip_and_legacy_config_preserved(self):
-        with tempfile.TemporaryDirectory() as folder, patch('yes_man.config_dir',return_value=Path(folder)):
+        with tempfile.TemporaryDirectory() as folder, patch('yes_man.config_dir',return_value=Path(folder)), patch('yes_man_tool_settings.config_dir',return_value=Path(folder)):
             first=self.config(api_key='first-secret',verify_tls=False)
             second=self.config(url='https://second/v1',api_key='second-secret')
             yes_man.save(first)
@@ -38,7 +38,7 @@ class YesManTests(unittest.TestCase):
             self.assertEqual((Path(folder)/'yes-man.json').stat().st_mode & 0o777,0o600)
 
     def test_profile_overwrite_and_failure_preserve_previous_state(self):
-        with tempfile.TemporaryDirectory() as folder, patch('yes_man.config_dir',return_value=Path(folder)):
+        with tempfile.TemporaryDirectory() as folder, patch('yes_man.config_dir',return_value=Path(folder)), patch('yes_man_tool_settings.config_dir',return_value=Path(folder)):
             yes_man.save_profile('Lab',self.config())
             path=Path(folder)/'yes-man.json'; before=path.read_bytes()
             with self.assertRaises(ValueError): yes_man.save_profile('Lab',dict(self.config(),model='other'))
@@ -87,7 +87,7 @@ class YesManTests(unittest.TestCase):
             self.assertEqual(tool_belt.applications([])[0]['builtin'],'yes-man')
 
     def test_private_persistence(self):
-        with tempfile.TemporaryDirectory() as folder, patch('yes_man.config_dir',return_value=Path(folder)):
+        with tempfile.TemporaryDirectory() as folder, patch('yes_man.config_dir',return_value=Path(folder)), patch('yes_man_tool_settings.config_dir',return_value=Path(folder)):
             yes_man.save(self.config(api_key='secret'))
             self.assertEqual(yes_man.settings()['api_key'],'secret')
             self.assertEqual((Path(folder)/'yes-man.json').stat().st_mode & 0o777,0o600)

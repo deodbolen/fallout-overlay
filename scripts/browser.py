@@ -35,6 +35,7 @@ import shlex
 import mimetypes
 
 ENTER = ('\n','\r',curses.KEY_ENTER)
+SETTINGS_TABS=('DISPLAY','AUDIO','CONTROLS','NETWORK','SYSTEM','LLM Connections','Tools')
 
 class SectionChanged(Exception):
     """Leave a submenu when the user switches the top-level section."""
@@ -384,7 +385,7 @@ class Navigator:
 
     def switch_settings_page(self,key):
         if self.sections[self.section]!='⚙️' or key not in (curses.KEY_LEFT,curses.KEY_RIGHT): return False
-        self.settings_index=max(0,min(5,self.settings_index+(1 if key==curses.KEY_RIGHT else -1)))
+        self.settings_index=max(0,min(len(SETTINGS_TABS)-1,self.settings_index+(1 if key==curses.KEY_RIGHT else -1)))
         self.message=''
         self.sound('select')
         return True
@@ -485,12 +486,18 @@ class Navigator:
         if self.sections[self.section]=='⚙️':
             status='Enabled' if crt_settings.running() and crt_settings.enabled() else 'Disabled'
             animation='Enabled' if crt_settings.running() and crt_settings.animation_enabled() else 'Disabled'
-            tabs=('DISPLAY','AUDIO','CONTROLS','NETWORK','SYSTEM','MCP Servers')
-            title='SETTINGS // '+'   '.join('['+name+']' if i==self.settings_index else name for i,name in enumerate(tabs))
-            if tabs[self.settings_index]=='MCP Servers':
-                return 'mcp_servers',title,['MCP Servers',
-                    'Configure external MCP servers and manage their tools.',
-                    '', 'No MCP servers configured.'],[]
+            tabs=SETTINGS_TABS
+            # Keep the selected Settings tab visible on narrow SSH terminals.
+            start=0; end=len(tabs)
+            width=max(1,self.screen.getmaxyx()[1]-1)
+            def heading():
+                return 'SETTINGS // '+('‹ ' if start else '')+'   '.join(
+                    '['+name+']' if i==self.settings_index else name
+                    for i,name in enumerate(tabs[start:end],start))+(' ›' if end<len(tabs) else '')
+            while len(heading())>width and end-start>1:
+                if self.settings_index-start>end-1-self.settings_index: start+=1
+                else: end-=1
+            title=heading()
             groups=(
                 [('CRT overlay: '+status,0),('CRT scan animation: '+animation,1),
                  ('CRT effects and fan always on: '+('On' if crt_settings.always_on() else 'Off'),9),
@@ -501,6 +508,8 @@ class Navigator:
                 [('Section modifier: '+navigator_settings.section_modifier().title(),5)],
                 [('Configure network connections',8)],
                 [('Update',6)],
+                [('Connection settings',11),('Select LLM profile',15)],
+                [('Web search',12),('MCP Servers',14)],
             )
             entries=groups[self.settings_index]
             return 'settings_'+tabs[self.settings_index].lower(),title,[label for label,_ in entries],[action for _,action in entries]
@@ -513,10 +522,10 @@ class Navigator:
 
     def application_actions(self,app):
         if app.get('builtin')=='yes-man':
-            from yes_man_ui import run, configure
-            choice=self.menu('YES MAN',['Launch','Configure LLM server','Cancel'])
+            from yes_man_ui import run, select_profile
+            choice=self.menu('YES MAN',['Launch','Select LLM profile','Cancel'])
             if choice==0: run(self)
-            elif choice==1: configure(self)
+            elif choice==1: select_profile(self)
             return
         saved=tool_belt.contains(app)
         choice=self.menu(app['name'],['Launch','Remove from Tool Belt' if saved else 'Add to Tool Belt','Cancel'])
@@ -1022,6 +1031,10 @@ class Navigator:
                 self.sessions.prune()
         elif page.startswith('settings_'):
             index=items[index]
+            if index in (11,12,14,15):
+                from yes_man_ui import configure, configure_tools, mcp_servers_panel, select_profile
+                {11:configure,12:configure_tools,14:mcp_servers_panel,15:select_profile}[index](self)
+                return
             if index==10:
                 value=self.text('TERMINAL SCROLLBACK (10,000–100,000 lines)',str(navigator_settings.scrollback_lines()))
                 if value is not None:navigator_settings.save_scrollback_lines(value)
