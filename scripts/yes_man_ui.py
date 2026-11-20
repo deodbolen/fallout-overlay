@@ -26,11 +26,11 @@ def install_exit_handler():
     _exit_requested.clear()
 
 
-def secret(nav):
+def secret(nav,label='LLM CONNECTION // API KEY'):
     field=TextField(); cursor(True)
     try:
         while True:
-            nav.draw('LLM CONNECTION // API KEY',[],detail='Enter a replacement key. Empty clears it. Esc keeps the saved key.')
+            nav.draw(label,[],detail='Enter a replacement key. Empty clears it. Esc keeps the saved key.')
             masked=TextField('*'*len(field.value)); masked.position=field.position
             draw_box(nav.screen,masked)
             key=read_key(nav.screen)
@@ -143,8 +143,7 @@ def mcp_servers_panel(nav):
         if key in ('\x1b','\x7f',curses.KEY_BACKSPACE,'q','Q'): return
         if key in ('\n','\r',curses.KEY_ENTER):
             if native and selected==0:
-                from embedded_client import request
-                request('show_mcp_add_dialog')
+                add_mcp_server_form(nav)
             elif not native: return
         elif key in (curses.KEY_DOWN,'j'): selected+=1
         elif key in (curses.KEY_UP,'k'): selected-=1
@@ -152,6 +151,47 @@ def mcp_servers_panel(nav):
         elif key==curses.KEY_PPAGE: selected-=visible
         elif key==curses.KEY_HOME: selected=0
         elif key==curses.KEY_END: selected=limit
+
+
+def add_mcp_server_form(nav):
+    """SSH-style form preview; drafts never leave this screen or get saved."""
+    draft={'name':'','transport':'streamable-http','url':'','bearer_token':'',
+           'command':'','arguments':''}
+    selected=0
+    selectable=(0,1,2,3,5)  # ADD remains visible but disabled.
+    try:
+        while True:
+            http=draft['transport']=='streamable-http'
+            fields=('name','transport','url','bearer_token') if http else ('name','transport','command','arguments')
+            labels=['Server name: '+draft['name'],
+                    'Transport type: '+('Streamable HTTP' if http else 'stdio')]
+            if http:
+                labels+=['Endpoint URL: '+draft['url'],
+                         'Bearer token: '+('[set]' if draft['bearer_token'] else '(optional)')]
+            else:
+                labels+=['Executable command: '+draft['command'],'Arguments: '+draft['arguments']]
+            labels+=['ADD (disabled)','CANCEL']
+            nav.draw('ADD MCP SERVER',labels,selected,
+                     detail='Saving will be implemented next. Add is disabled.')
+            key=nav.menu_key()
+            position=selectable.index(selected)
+            if key in (curses.KEY_UP,'k'): selected=selectable[max(0,position-1)]
+            elif key in (curses.KEY_DOWN,'j'): selected=selectable[min(len(selectable)-1,position+1)]
+            elif key in ('\x1b','\x7f',curses.KEY_BACKSPACE): return
+            elif key in ('\n','\r',curses.KEY_ENTER):
+                if selected==5: return
+                field=fields[selected]
+                if field=='transport':
+                    choice=nav.menu('MCP TRANSPORT',['Streamable HTTP','stdio','Cancel'])
+                    if choice in (0,1): draft['transport']=('streamable-http','stdio')[choice]
+                elif field=='bearer_token':
+                    value=secret(nav,'MCP SERVER // BEARER TOKEN')
+                    if value is not None: draft[field]=value
+                else:
+                    value=nav.text(labels[selected].split(':',1)[0].upper(),draft[field])
+                    if value is not None: draft[field]=value
+    finally:
+        draft.clear()
 
 
 def test_connection(nav,config):
