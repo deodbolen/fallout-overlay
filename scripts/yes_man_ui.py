@@ -119,11 +119,32 @@ def configure_tools(nav):
 
 
 def mcp_servers_panel(nav):
+    from mcp_servers import load, validate_server
+    labels=['Configure external MCP servers and manage their tools.', '']
+    try:
+        servers=[validate_server(server) for server in load()['servers']]
+        if not servers:
+            labels.append('No MCP servers configured.')
+        for server in servers:
+            # Explicit allowlist: never render whole records or exception text.
+            labels.extend([server['name'],
+                           server['transport']+' // '+('Enabled' if server['enabled'] else 'Disabled'), ''])
+    except (OSError,ValueError,TypeError,KeyError,RecursionError):
+        labels.append('Unable to read MCP server configuration.')
+    offset=0
     while True:
-        nav.draw('MCP Servers',['Configure external MCP servers and manage their tools.',
-                 '', 'No MCP servers configured.'],highlight=False)
+        visible=max(1,nav.screen.getmaxyx()[0]-7)
+        offset=max(0,min(offset,max(0,len(labels)-visible)))
+        nav.draw('MCP Servers',labels,offset,highlight=False,
+                 detail='Read only. Up/Down: scroll. Esc: Back.')
         key=nav.menu_key()
         if key in ('\x1b','\x7f',curses.KEY_BACKSPACE,'q','Q','\n','\r',curses.KEY_ENTER): return
+        if key in (curses.KEY_DOWN,'j'): offset+=1
+        elif key in (curses.KEY_UP,'k'): offset-=1
+        elif key==curses.KEY_NPAGE: offset+=visible
+        elif key==curses.KEY_PPAGE: offset-=visible
+        elif key==curses.KEY_HOME: offset=0
+        elif key==curses.KEY_END: offset=max(0,len(labels)-visible)
 
 
 
