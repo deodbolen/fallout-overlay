@@ -104,9 +104,18 @@ def update_server(server_id, changes):
         for index, server in enumerate(document['servers']):
             if validate_server(server)['id'] == server_id:
                 merged = dict(server)
+                if changes.get('transport', server['transport']) != server['transport']:
+                    old_fields = ('command', 'args', 'env', 'cwd') if server['transport'] == 'stdio' else ('url', 'bearer_token')
+                    for field in old_fields:
+                        merged.pop(field, None)
                 merged.update(changes)
                 merged['id'] = server_id
                 normalized = validate_server(merged)
+                previous = validate_server(server)
+                identity_fields = ('transport', 'url', 'bearer_token', 'command', 'args', 'env', 'cwd')
+                if any(normalized.get(field) != previous.get(field) for field in identity_fields):
+                    normalized['enabled'] = False
+                    normalized['tool_permissions'] = {}
                 updated = dict(document)
                 updated['servers'] = list(document['servers'])
                 updated['servers'][index] = normalized

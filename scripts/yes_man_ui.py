@@ -28,11 +28,11 @@ def install_exit_handler():
     _exit_requested.clear()
 
 
-def secret(nav,label='LLM CONNECTION // API KEY'):
+def secret(nav,label='LLM CONNECTION // API KEY',detail='Enter a replacement key. Empty clears it. Esc keeps the saved key.'):
     field=TextField(); cursor(True)
     try:
         while True:
-            nav.draw(label,[],detail='Enter a replacement key. Empty clears it. Esc keeps the saved key.')
+            nav.draw(label,[],detail=detail)
             masked=TextField('*'*len(field.value)); masked.position=field.position
             draw_box(nav.screen,masked)
             key=read_key(nav.screen)
@@ -155,6 +155,12 @@ def mcp_servers_panel(nav):
                     labels,identifiers=refresh_servers()
                     selected=next((index for index,identifier in enumerate(identifiers)
                                    if identifier==added['id']),0)
+            elif native and identifiers[selected] is not None:
+                changed=mcp_server_actions(nav,identifiers[selected])
+                if changed is not None:
+                    labels,identifiers=refresh_servers()
+                    selected=next((index for index,identifier in enumerate(identifiers)
+                                   if identifier==changed['id']),0)
             elif not native: return
         elif key in (curses.KEY_DOWN,'j'): selected+=1
         elif key in (curses.KEY_UP,'k'): selected-=1
@@ -164,13 +170,18 @@ def mcp_servers_panel(nav):
         elif key==curses.KEY_END: selected=limit
 
 
-def add_mcp_server_form(nav):
-    """Save an explicitly entered server, disabled and without tool grants."""
-    from mcp_servers import add_server
+def add_mcp_server_form(nav,server=None):
+    """Add or edit saved connection settings without connecting to a server."""
+    from mcp_servers import add_server, update_server, validate_server
+    original=validate_server(server) if server is not None else None
     draft={'name':'','transport':'streamable-http','url':'','bearer_token':'',
            'command':'','arguments':''}
+    if original is not None:
+        draft.update(name=original['name'],transport=original['transport'],
+                     url=original.get('url',''),command=original.get('command',''),
+                     arguments=shlex.join(original.get('args',[])))
     selected=0
-    server_id=uuid.uuid4().hex
+    server_id=original['id'] if original is not None else uuid.uuid4().hex
     error=''
     try:
         while True:
@@ -180,15 +191,18 @@ def add_mcp_server_form(nav):
                     'Transport type: '+('Streamable HTTP' if http else 'stdio')]
             if http:
                 labels+=['Endpoint URL: '+draft['url'],
-                         'Bearer token: '+('[set]' if draft['bearer_token'] else '(optional)')]
+                         'Bearer token: '+('[replacement set]' if draft['bearer_token'] else
+                           '(saved; leave blank to retain)' if original and original.get('bearer_token') else '(optional)')]
             else:
                 labels+=['Executable command: '+draft['command'],'Arguments: '+draft['arguments']]
             can_add=bool(draft['name'].strip() and draft['url' if http else 'command'].strip())
             selectable=(0,1,2,3,4,5) if can_add else (0,1,2,3,5)
             if selected not in selectable: selected=5
-            labels+=['ADD' if can_add else 'ADD (disabled)','CANCEL']
-            nav.draw('ADD MCP SERVER',labels,selected,
-                     detail=error or 'New servers are saved disabled. No connection or tool permissions are granted.')
+            action='SAVE' if original is not None else 'ADD'
+            labels+=[action if can_add else action+' (disabled)','CANCEL']
+            nav.draw('EDIT MCP SERVER' if original is not None else 'ADD MCP SERVER',labels,selected,
+                     detail=error or ('Connection changes disable the server and clear tool permissions.' if original is not None
+                                      else 'New servers are saved disabled. No connection or tool permissions are granted.'))
             key=nav.menu_key()
             position=selectable.index(selected)
             if key in (curses.KEY_UP,'k'): selected=selectable[max(0,position-1)]
@@ -197,30 +211,34 @@ def add_mcp_server_form(nav):
             elif key in ('\n','\r',curses.KEY_ENTER):
                 if selected==5: return
                 if selected==4:
-                    record={'id':server_id,'name':draft['name'],'transport':draft['transport'],
-                            'enabled':False,'tool_permissions':{}}
+                    record={'id':server_id,'name':draft['name'],'transport':draft['transport']}
+                    if original is None: record.update(enabled=False,tool_permissions={})
                     if http:
                         record['url']=draft['url']
                         if draft['bearer_token']: record['bearer_token']=draft['bearer_token']
+                        elif original and original['transport']=='streamable-http' and 'bearer_token' in original:
+                            record['bearer_token']=original['bearer_token']
                     else:
                         try: arguments=shlex.split(draft['arguments'])
                         except ValueError:
                             error='Arguments have unmatched quotes. Use quotes around arguments containing spaces.'
                             continue
-                        record.update(command=draft['command'],args=arguments,env={})
+                        record.update(command=draft['command'],args=arguments)
+                        if original is None: record['env']={}
                     try:
-                        added=add_server(record)
+                        added=update_server(server_id,record) if original is not None else add_server(record)
                     except ValueError as failure:
                         # Configuration validators use fixed messages. Redact the
                         # entered token defensively; never show an I/O exception.
                         error=str(failure)
-                        if draft['bearer_token']: error=error.replace(draft['bearer_token'],'[redacted]')
+                        for token in (draft['bearer_token'],original.get('bearer_token','') if original else ''):
+                            if token: error=error.replace(token,'[redacted]')
                         error=''.join(char for char in error if char.isprintable())[:300]
                         continue
                     except (OSError,TypeError,RecursionError):
                         error='Could not save MCP configuration. Check the configuration file, permissions, and disk space.'
                         continue
-                    nav.message='MCP server saved as Disabled. No connection established.'
+                    nav.message='MCP server saved. No connection established.'
                     return added
                 error=''
                 field=fields[selected]
@@ -228,13 +246,74 @@ def add_mcp_server_form(nav):
                     choice=nav.menu('MCP TRANSPORT',['Streamable HTTP','stdio','Cancel'])
                     if choice in (0,1): draft['transport']=('streamable-http','stdio')[choice]
                 elif field=='bearer_token':
-                    value=secret(nav,'MCP SERVER // BEARER TOKEN')
+                    value=secret(nav,'MCP SERVER // BEARER TOKEN',
+                                 detail='Leave blank to retain the saved token. Esc keeps the current draft.' if original and original.get('bearer_token')
+                                 else 'Optional token. Empty clears the draft. Esc keeps the current draft.')
                     if value is not None: draft[field]=value
                 else:
                     value=nav.text(labels[selected].split(':',1)[0].upper(),draft[field])
                     if value is not None: draft[field]=value
     finally:
         draft.clear()
+
+
+def mcp_server_actions(nav,server_id):
+    from mcp_servers import load, validate_server
+    while True:
+        try:
+            server=next((validate_server(row) for row in load()['servers'] if row.get('id')==server_id),None)
+            if server is None: raise ValueError
+        except (OSError,ValueError,TypeError,AttributeError,KeyError,RecursionError):
+            nav.message='Could not read the selected MCP server configuration.'
+            return None
+        choice=nav.menu('MCP SERVER // '+server['name'],['Edit Server','Test Connection','Back'],detail=nav.message)
+        if choice is None or choice==2: return None
+        if choice==0:
+            changed=add_mcp_server_form(nav,server)
+            if changed is not None: return changed
+        elif choice==1: test_mcp_connection(nav,server_id)
+
+
+def test_mcp_connection(nav,server_id):
+    from mcp_servers import load, validate_server
+    active=getattr(nav,'mcp_connection_test',None)
+    if active and not active['done'].is_set():
+        nav.message='An MCP connection test is already running.'
+        return
+    try:
+        server=next((validate_server(row) for row in load()['servers'] if row.get('id')==server_id),None)
+        if server is None: raise ValueError
+    except (OSError,ValueError,TypeError,AttributeError,KeyError,RecursionError):
+        nav.message='Could not read the saved MCP server configuration.'
+        return
+    state={'done':threading.Event(),'result':None}
+    nav.mcp_connection_test=state
+    def work(server=server,state=state):
+        try:
+            from yes_man_mcp_test import run_test
+            state['result']=run_test(server)
+        except Exception:
+            state['result']={'ok':False,'error':'Could not complete the connection test.'}
+        finally: state['done'].set()
+    try: threading.Thread(target=work,daemon=True).start()
+    except RuntimeError:
+        state['done'].set()
+        nav.message='Could not start the connection test.'
+        return
+    nav.screen.timeout(100)
+    try:
+        while not state['done'].is_set():
+            nav.draw('MCP CONNECTION TEST',[server['name'],'Testing MCP initialization…'],
+                     detail='Timeout: 20 seconds plus bounded cleanup. Esc: Back.',highlight=False)
+            try: key=nav.menu_key()
+            except curses.error: continue
+            if key in ('\x1b','\x1d'): return
+        result=state['result']
+        if result['ok']:
+            lines=[server['name'],'Connection successful.','Protocol: '+result['protocol']]
+        else: lines=[server['name']]+wrap_chat_line(result['error'],max(1,nav.screen.getmaxyx()[1]-2))
+    finally: nav.screen.timeout(-1)
+    nav.menu('MCP CONNECTION TEST',lines+['Back'])
 
 
 def test_connection(nav,config):
