@@ -117,12 +117,25 @@ class Host:
         self.power_button.set_tooltip_text('Sleep, log out, restart or shut down')
         self.power_button.connect('clicked',self.open_power_menu)
         overlay.add_overlay(self.power_button)
-        self.mcp_add_button=Gtk.Button(label='Add Server')
-        self.mcp_add_button.set_halign(Gtk.Align.END); self.mcp_add_button.set_valign(Gtk.Align.END)
-        self.mcp_add_button.set_margin_end(16); self.mcp_add_button.set_margin_bottom(8)
+        self.mcp_add_button=Gtk.Button(label='+ Add Server')
+        self.mcp_add_button.set_name('mcp-add-action')
+        self.mcp_add_button.set_relief(Gtk.ReliefStyle.NONE)
+        self.mcp_add_button.set_halign(Gtk.Align.END); self.mcp_add_button.set_valign(Gtk.Align.START)
+        self.mcp_add_button.set_margin_end(16)
+        action_css=Gtk.CssProvider()
+        action_css.load_from_data(b'''
+            #mcp-add-action { background: transparent; border: none; border-radius: 0;
+                box-shadow: none; text-shadow: none; padding: 0 4px;
+                min-height: 0; color: #9dff72; }
+            #mcp-add-action label { color: #9dff72; }
+            #mcp-add-action:hover, #mcp-add-action:focus { background: #14291a; }
+        ''')
+        self.mcp_add_button.get_style_context().add_provider(action_css,Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        self.mcp_add_button.get_child().get_style_context().add_provider(action_css,Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
         self.mcp_add_button.set_no_show_all(True)
         self.mcp_add_button.connect('clicked',self.open_add_mcp_server)
         overlay.add_overlay(self.mcp_add_button)
+        self.navigator.connect('size-allocate',lambda *args: self.layout_mcp_action())
         self.stack.connect('notify::visible-child-name',lambda *args: self.update_power_button())
         env=dict(os.environ,FALLOUT_EMBEDDED_SOCKET=str(path),TERM='xterm-256color')
         self.spawn(self.navigator,[sys.executable,str(ROOT/'scripts/browser.py')],str(Path.home()),env,self.nav_spawned)
@@ -136,6 +149,12 @@ class Host:
         self.power_button.set_visible(self.shortcut_context['section']==0 and self.stack.get_visible_child_name()=='navigator')
         self.mcp_add_button.set_visible(self.shortcut_context['section']==5 and
             self.shortcut_context['title']=='MCP Servers' and self.stack.get_visible_child_name()=='navigator')
+        self.layout_mcp_action()
+
+    def layout_mcp_action(self):
+        self.mcp_add_button.set_margin_top(3*max(1,self.navigator.get_char_height()))
+        self.mcp_add_button.get_child().override_font(
+            Pango.FontDescription('DejaVu Sans Mono '+str(self.nav_font_size)))
 
     def open_add_mcp_server(self,button):
         """GUI-only configuration preview; no persistence or connections."""
