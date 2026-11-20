@@ -120,38 +120,38 @@ def configure_tools(nav):
 
 def mcp_servers_panel(nav):
     from mcp_servers import load, validate_server
-    labels=['Configure external MCP servers and manage their tools.', '']
+    native=bool(os.environ.get('FALLOUT_EMBEDDED_SOCKET'))
+    labels=['+ Add Server'] if native else []
     try:
         servers=[validate_server(server) for server in load()['servers']]
         if not servers:
             labels.append('No MCP servers configured.')
         for server in servers:
             # Explicit allowlist: never render whole records or exception text.
-            labels.extend([server['name'],
-                           server['transport']+' // '+('Enabled' if server['enabled'] else 'Disabled'), ''])
+            labels.append(server['name']+' // '+server['transport']+' // '+
+                          ('Enabled' if server['enabled'] else 'Disabled'))
     except (OSError,ValueError,TypeError,KeyError,RecursionError):
         labels.append('Unable to read MCP server configuration.')
-    offset=0
-    native=bool(os.environ.get('FALLOUT_EMBEDDED_SOCKET'))
+    selected=0
     while True:
         visible=max(1,nav.screen.getmaxyx()[0]-7)
-        offset=max(0,min(offset,max(0,len(labels)-visible)))
-        nav.draw('MCP Servers',labels,offset,highlight=False,
-                 detail=('Up at top: Add Server. Enter: open. Down: list. Esc: Back.' if native
-                         else 'Read only. Up/Down: scroll. Esc: Back.'))
+        limit=len(labels)-1 if native else max(0,len(labels)-visible)
+        selected=max(0,min(selected,limit))
+        nav.draw('MCP Servers',labels,selected,highlight=native,
+                 detail='Configure external MCP servers and manage their tools.')
         key=nav.menu_key()
-        if key in ('\x1b','\x7f',curses.KEY_BACKSPACE,'q','Q','\n','\r',curses.KEY_ENTER): return
-        if key in (curses.KEY_DOWN,'j'): offset+=1
-        elif key in (curses.KEY_UP,'k'):
-            if native and offset==0:
+        if key in ('\x1b','\x7f',curses.KEY_BACKSPACE,'q','Q'): return
+        if key in ('\n','\r',curses.KEY_ENTER):
+            if native and selected==0:
                 from embedded_client import request
-                request('focus_mcp_add',timeout=2)
-            else: offset-=1
-        elif key==curses.KEY_NPAGE: offset+=visible
-        elif key==curses.KEY_PPAGE: offset-=visible
-        elif key==curses.KEY_HOME: offset=0
-        elif key==curses.KEY_END: offset=max(0,len(labels)-visible)
-
+                request('show_mcp_add_dialog')
+            elif not native: return
+        elif key in (curses.KEY_DOWN,'j'): selected+=1
+        elif key in (curses.KEY_UP,'k'): selected-=1
+        elif key==curses.KEY_NPAGE: selected+=visible
+        elif key==curses.KEY_PPAGE: selected-=visible
+        elif key==curses.KEY_HOME: selected=0
+        elif key==curses.KEY_END: selected=limit
 
 
 def test_connection(nav,config):
