@@ -134,6 +134,7 @@ class Host:
         self.mcp_add_button.get_child().get_style_context().add_provider(action_css,Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
         self.mcp_add_button.set_no_show_all(True)
         self.mcp_add_button.connect('clicked',self.open_add_mcp_server)
+        self.mcp_add_button.connect('key-press-event',self.mcp_add_keys)
         overlay.add_overlay(self.mcp_add_button)
         self.navigator.connect('size-allocate',lambda *args: self.layout_mcp_action())
         self.stack.connect('notify::visible-child-name',lambda *args: self.update_power_button())
@@ -155,6 +156,15 @@ class Host:
         self.mcp_add_button.set_margin_top(3*max(1,self.navigator.get_char_height()))
         self.mcp_add_button.get_child().override_font(
             Pango.FontDescription('DejaVu Sans Mono '+str(self.nav_font_size)))
+
+    def mcp_add_keys(self,button,event):
+        if event.keyval in (Gdk.KEY_Down,Gdk.KEY_Up,Gdk.KEY_Escape):
+            self.navigator.grab_focus()
+            return True
+        if event.keyval in (Gdk.KEY_Return,Gdk.KEY_KP_Enter):
+            self.open_add_mcp_server(button)
+            return True
+        return False
 
     def open_add_mcp_server(self,button):
         """GUI-only configuration preview; no persistence or connections."""
@@ -755,6 +765,9 @@ class Host:
                         elif command=='shortcut_context':
                             self.shortcut_context={'section':int(request['section']),'title':str(request.get('title',''))[:160],'context':str(request.get('context',''))[:512]}
                             self.update_power_button()
+                            reply({})
+                        elif command=='focus_mcp_add':
+                            if self.mcp_add_button.get_visible(): self.mcp_add_button.grab_focus()
                             reply({})
                         elif command=='browse_network': reply(self.discovery.browse(request.get('uri','network:///'),request.get('refresh',False)))
                         elif command=='mount_server': self.mount_server(request['uri'],reply)

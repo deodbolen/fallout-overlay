@@ -132,15 +132,21 @@ def mcp_servers_panel(nav):
     except (OSError,ValueError,TypeError,KeyError,RecursionError):
         labels.append('Unable to read MCP server configuration.')
     offset=0
+    native=bool(os.environ.get('FALLOUT_EMBEDDED_SOCKET'))
     while True:
         visible=max(1,nav.screen.getmaxyx()[0]-7)
         offset=max(0,min(offset,max(0,len(labels)-visible)))
         nav.draw('MCP Servers',labels,offset,highlight=False,
-                 detail='Read only. Up/Down: scroll. Esc: Back.')
+                 detail=('Up at top: Add Server. Enter: open. Down: list. Esc: Back.' if native
+                         else 'Read only. Up/Down: scroll. Esc: Back.'))
         key=nav.menu_key()
         if key in ('\x1b','\x7f',curses.KEY_BACKSPACE,'q','Q','\n','\r',curses.KEY_ENTER): return
         if key in (curses.KEY_DOWN,'j'): offset+=1
-        elif key in (curses.KEY_UP,'k'): offset-=1
+        elif key in (curses.KEY_UP,'k'):
+            if native and offset==0:
+                from embedded_client import request
+                request('focus_mcp_add',timeout=2)
+            else: offset-=1
         elif key==curses.KEY_NPAGE: offset+=visible
         elif key==curses.KEY_PPAGE: offset-=visible
         elif key==curses.KEY_HOME: offset=0
