@@ -6,6 +6,8 @@ from pathlib import Path
 from functools import lru_cache
 import threading
 import re
+import shlex
+import uuid
 import yes_man
 import yes_man_tool_settings
 from yes_man_request import RequestContext, RequestCancelled
@@ -121,17 +123,22 @@ def configure_tools(nav):
 def mcp_servers_panel(nav):
     from mcp_servers import load, validate_server
     native=bool(os.environ.get('FALLOUT_EMBEDDED_SOCKET'))
-    labels=['+ Add Server'] if native else []
-    try:
-        servers=[validate_server(server) for server in load()['servers']]
-        if not servers:
-            labels.append('No MCP servers configured.')
-        for server in servers:
-            # Explicit allowlist: never render whole records or exception text.
-            labels.append(server['name']+' // '+server['transport']+' // '+
-                          ('Enabled' if server['enabled'] else 'Disabled'))
-    except (OSError,ValueError,TypeError,KeyError,RecursionError):
-        labels.append('Unable to read MCP server configuration.')
+    def refresh_servers():
+        labels=['+ Add Server'] if native else []
+        identifiers=[None] if native else []
+        try:
+            servers=[validate_server(server) for server in load()['servers']]
+            if not servers:
+                labels.append('No MCP servers configured.'); identifiers.append(None)
+            for server in servers:
+                # Explicit allowlist: never render whole records or exception text.
+                labels.append(server['name']+' // '+server['transport']+' // '+
+                              ('Enabled' if server['enabled'] else 'Disabled'))
+                identifiers.append(server['id'])
+        except (OSError,ValueError,TypeError,KeyError,RecursionError):
+            labels.append('Unable to read MCP server configuration.'); identifiers.append(None)
+        return labels,identifiers
+    labels,identifiers=refresh_servers()
     selected=0
     while True:
         visible=max(1,nav.screen.getmaxyx()[0]-7)
@@ -143,7 +150,11 @@ def mcp_servers_panel(nav):
         if key in ('\x1b','\x7f',curses.KEY_BACKSPACE,'q','Q'): return
         if key in ('\n','\r',curses.KEY_ENTER):
             if native and selected==0:
-                add_mcp_server_form(nav)
+                added=add_mcp_server_form(nav)
+                if added is not None:
+                    labels,identifiers=refresh_servers()
+                    selected=next((index for index,identifier in enumerate(identifiers)
+                                   if identifier==added['id']),0)
             elif not native: return
         elif key in (curses.KEY_DOWN,'j'): selected+=1
         elif key in (curses.KEY_UP,'k'): selected-=1
@@ -154,11 +165,13 @@ def mcp_servers_panel(nav):
 
 
 def add_mcp_server_form(nav):
-    """SSH-style form preview; drafts never leave this screen or get saved."""
+    """Save an explicitly entered server, disabled and without tool grants."""
+    from mcp_servers import add_server
     draft={'name':'','transport':'streamable-http','url':'','bearer_token':'',
            'command':'','arguments':''}
     selected=0
-    selectable=(0,1,2,3,5)  # ADD remains visible but disabled.
+    server_id=uuid.uuid4().hex
+    error=''
     try:
         while True:
             http=draft['transport']=='streamable-http'
@@ -170,9 +183,12 @@ def add_mcp_server_form(nav):
                          'Bearer token: '+('[set]' if draft['bearer_token'] else '(optional)')]
             else:
                 labels+=['Executable command: '+draft['command'],'Arguments: '+draft['arguments']]
-            labels+=['ADD (disabled)','CANCEL']
+            can_add=bool(draft['name'].strip() and draft['url' if http else 'command'].strip())
+            selectable=(0,1,2,3,4,5) if can_add else (0,1,2,3,5)
+            if selected not in selectable: selected=5
+            labels+=['ADD' if can_add else 'ADD (disabled)','CANCEL']
             nav.draw('ADD MCP SERVER',labels,selected,
-                     detail='Saving will be implemented next. Add is disabled.')
+                     detail=error or 'New servers are saved disabled. No connection or tool permissions are granted.')
             key=nav.menu_key()
             position=selectable.index(selected)
             if key in (curses.KEY_UP,'k'): selected=selectable[max(0,position-1)]
@@ -180,6 +196,33 @@ def add_mcp_server_form(nav):
             elif key in ('\x1b','\x7f',curses.KEY_BACKSPACE): return
             elif key in ('\n','\r',curses.KEY_ENTER):
                 if selected==5: return
+                if selected==4:
+                    record={'id':server_id,'name':draft['name'],'transport':draft['transport'],
+                            'enabled':False,'tool_permissions':{}}
+                    if http:
+                        record['url']=draft['url']
+                        if draft['bearer_token']: record['bearer_token']=draft['bearer_token']
+                    else:
+                        try: arguments=shlex.split(draft['arguments'])
+                        except ValueError:
+                            error='Arguments have unmatched quotes. Use quotes around arguments containing spaces.'
+                            continue
+                        record.update(command=draft['command'],args=arguments,env={})
+                    try:
+                        added=add_server(record)
+                    except ValueError as failure:
+                        # Configuration validators use fixed messages. Redact the
+                        # entered token defensively; never show an I/O exception.
+                        error=str(failure)
+                        if draft['bearer_token']: error=error.replace(draft['bearer_token'],'[redacted]')
+                        error=''.join(char for char in error if char.isprintable())[:300]
+                        continue
+                    except (OSError,TypeError,RecursionError):
+                        error='Could not save MCP configuration. Check the configuration file, permissions, and disk space.'
+                        continue
+                    nav.message='MCP server saved as Disabled. No connection established.'
+                    return added
+                error=''
                 field=fields[selected]
                 if field=='transport':
                     choice=nav.menu('MCP TRANSPORT',['Streamable HTTP','stdio','Cancel'])
