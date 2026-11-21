@@ -7,6 +7,32 @@ import json
 from mcp_servers import validate_tool_permission
 
 
+def create_runtime_transport(server):
+    """Construct an inert transport from trusted local server configuration.
+
+    Never pass model-generated arguments here. Construction neither starts nor
+    connects the transport, and does not replace runtime permission validation.
+    The caller owns the returned transport's eventual lifecycle.
+    """
+    try:
+        from mcp_servers import validate_server
+
+        validated = validate_server(server)
+        if not validated['enabled']:
+            raise ValueError
+        if validated['transport'] == 'stdio':
+            from yes_man_mcp_stdio import StdioTransport
+
+            return StdioTransport(validated)
+        if validated['transport'] == 'streamable-http':
+            from yes_man_mcp_http import StreamableHttpTransport
+
+            return StreamableHttpTransport(validated['url'], validated.get('bearer_token'))
+        raise ValueError
+    except Exception:
+        raise ValueError('Could not construct an enabled MCP runtime transport.') from None
+
+
 def revalidate_tool_permission(model_tool_name, tool_mapping):
     """Return the current saved policy for a trusted, server-scoped binding.
 
