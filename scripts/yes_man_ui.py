@@ -258,7 +258,7 @@ def add_mcp_server_form(nav,server=None):
 
 
 def mcp_server_actions(nav,server_id):
-    from mcp_servers import load, validate_server
+    from mcp_servers import load, validate_server, update_server
     while True:
         try:
             server=next((validate_server(row) for row in load()['servers'] if row.get('id')==server_id),None)
@@ -266,13 +266,24 @@ def mcp_server_actions(nav,server_id):
         except (OSError,ValueError,TypeError,AttributeError,KeyError,RecursionError):
             nav.message='Could not read the selected MCP server configuration.'
             return None
-        choice=nav.menu('MCP SERVER // '+server['name'],['Edit Server','Test Connection','Discover Tools','Back'],detail=nav.message)
-        if choice is None or choice==3: return None
+        toggle_label='Disable Server' if server['enabled'] else 'Enable Server'
+        status='Enabled' if server['enabled'] else 'Disabled'
+        choice=nav.menu('MCP SERVER // '+server['name']+' // '+status,
+                        ['Edit Server','Test Connection','Discover Tools',toggle_label,'Back'],detail=nav.message)
+        if choice is None or choice==4: return None
         if choice==0:
             changed=add_mcp_server_form(nav,server)
             if changed is not None: return changed
         elif choice==1: test_mcp_connection(nav,server_id)
         elif choice==2: discover_mcp_tools(nav,server_id)
+        elif choice==3:
+            try:
+                update_server(server_id,{'enabled':not server['enabled']})
+            except (OSError,ValueError,TypeError,AttributeError,KeyError,RecursionError):
+                nav.message='Could not save the MCP server state. No state change was confirmed.'
+            else:
+                nav.message='MCP server state saved. No connection established or tool permissions changed.'
+            # Reload persisted state on the next iteration before displaying it.
 
 
 def discover_mcp_tools(nav,server_id):
