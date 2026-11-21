@@ -7,6 +7,98 @@ import json
 from mcp_servers import validate_tool_permission
 
 
+def invoke_authorized_tool(model_tool_name, arguments, tool_mapping, context=None):
+    """Execute one currently Always Allow invocation, without retries.
+
+    Cancellation is cooperative between blocking transport operations. Each
+    protocol operation uses the existing ten-second transport timeout; HTTP's
+    timeout is a socket timeout, not a whole-operation deadline. HTTP owns no
+    persistent connection; stdio is always closed by this lifecycle owner.
+    """
+    from mcp_servers import load, validate_server
+    from yes_man_request import RequestCancelled
+    import sys
+
+    transport = None
+    try:
+        def checkpoint():
+            if context is not None:
+                context.raise_if_cancelled()
+
+        def check_json(value):
+            if isinstance(value, dict):
+                if any(not isinstance(key, str) for key in value):
+                    raise ValueError
+                for item in value.values():
+                    check_json(item)
+            elif isinstance(value, list):
+                for item in value:
+                    check_json(item)
+            elif value is not None and type(value) not in (str, bool, int, float):
+                raise ValueError
+
+        def saved_server(authorization):
+            records = [validate_server(row) for row in load()['servers']]
+            ids = [row['id'] for row in records]
+            if len(set(ids)) != len(ids):
+                raise ValueError
+            server = next((row for row in records if row['id'] == authorization['server_id']), None)
+            if server is None or not server['enabled']:
+                raise ValueError
+            permission = validate_tool_permission(dict(
+                server['tool_permissions'].get(authorization['tool_name'], {}),
+                tool_name=authorization['tool_name']))
+            if not permission['enabled'] or permission['approval'] != 'always_allow':
+                raise ValueError
+            return server
+
+        checkpoint()
+        if not isinstance(arguments, dict):
+            raise ValueError
+        check_json(arguments)
+        # Snapshot arguments and trusted bindings before any blocking work.
+        proposed = json.loads(json.dumps(arguments, allow_nan=False))
+        mapping = deepcopy(tool_mapping)
+        authorization = revalidate_tool_permission(model_tool_name, mapping)
+        if authorization['approval'] != 'always_allow':
+            raise ValueError
+        server = saved_server(authorization)
+        checkpoint()
+        transport = create_runtime_transport(server)
+        checkpoint()
+        if server['transport'] == 'stdio':
+            transport.start()
+        checkpoint()
+        transport.initialize(timeout=10)
+        checkpoint()
+        current = revalidate_tool_permission(model_tool_name, mapping)
+        if current != authorization:
+            raise ValueError
+        latest = saved_server(current)
+        identity_fields = ('id', 'transport', 'url', 'bearer_token', 'command', 'args', 'env', 'cwd')
+        if any(latest.get(field) != server.get(field) for field in identity_fields):
+            raise ValueError
+        checkpoint()
+        result = transport.request('tools/call', {
+            'name': authorization['tool_name'], 'arguments': proposed}, timeout=10)
+        checkpoint()
+        return result
+    except RequestCancelled:
+        raise
+    except Exception:
+        raise RuntimeError('MCP tool invocation failed or was not authorized.') from None
+    finally:
+        if transport is not None:
+            unwinding = sys.exc_info()[0] is not None
+            close = getattr(transport, 'close', None)
+            if close is not None:
+                try:
+                    close()
+                except Exception:
+                    if not unwinding:
+                        raise RuntimeError('MCP transport cleanup failed; invocation outcome may be unknown.') from None
+
+
 def create_runtime_transport(server):
     """Construct an inert transport from trusted local server configuration.
 
