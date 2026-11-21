@@ -7,6 +7,50 @@ import json
 from mcp_servers import validate_tool_permission
 
 
+def revalidate_tool_permission(model_tool_name, tool_mapping):
+    """Return the current saved policy for a trusted, server-scoped binding.
+
+    Always Ask still requires future runtime approval. This read-only snapshot
+    neither grants execution nor prevents later configuration changes; callers
+    must enforce it at the execution boundary. All failures deny authorization.
+    """
+    from mcp_servers import load, validate_server
+
+    try:
+        if (not isinstance(model_tool_name, str) or not model_tool_name.strip() or
+                not isinstance(tool_mapping, dict) or model_tool_name not in tool_mapping):
+            raise ValueError
+        binding = tool_mapping[model_tool_name]
+        if not isinstance(binding, dict):
+            raise ValueError
+        server_id = binding.get('server_id')
+        tool_name = binding.get('tool_name')
+        if (not isinstance(server_id, str) or not server_id.strip() or
+                not isinstance(tool_name, str) or not tool_name.strip()):
+            raise ValueError
+        # Validate the entire current document and reject ambiguous server IDs.
+        # Never use the mapping's cached approval policy to authorize anything.
+        document = load()
+        servers = [validate_server(record) for record in document['servers']]
+        identifiers = [server['id'] for server in servers]
+        if len(set(identifiers)) != len(identifiers):
+            raise ValueError
+        server = next((record for record in servers if record['id'] == server_id), None)
+        if server is None or not server['enabled']:
+            raise ValueError
+        saved = server['tool_permissions'].get(tool_name)
+        if not isinstance(saved, dict):
+            raise ValueError
+        permission = validate_tool_permission(dict(saved, tool_name=tool_name))
+        if not permission['enabled']:
+            raise ValueError
+        return {'server_id': server_id, 'tool_name': tool_name,
+                'approval': permission['approval']}
+    except Exception:
+        # Validators and storage errors must not leak connection configuration.
+        raise ValueError('MCP tool authorization could not be confirmed.') from None
+
+
 def eligible_tools(server, discovered_tools):
     """Return independent tool records eligible for future registration.
 
