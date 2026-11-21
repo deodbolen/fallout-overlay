@@ -57,6 +57,52 @@ def eligible_tools(server, discovered_tools):
     return result
 
 
+def build_tool_mapping(model_records):
+    """Build local identity bindings from trusted adapter output, never model arguments.
+
+    Values contain only server_id, tool_name, and approval. A binding is not
+    execution authorization; future dispatch must still enforce permissions.
+    """
+    if not isinstance(model_records, list):
+        raise ValueError('Model MCP records must be a list.')
+    mapping = {}
+    identities = set()
+    for record in model_records:
+        if not isinstance(record, dict):
+            raise ValueError('Invalid model MCP tool record.')
+        definition = record.get('definition')
+        if not isinstance(definition, dict) or definition.get('type') != 'function':
+            raise ValueError('Invalid model MCP tool definition.')
+        function = definition.get('function')
+        if not isinstance(function, dict):
+            raise ValueError('Invalid model MCP tool function.')
+        model_name = function.get('name')
+        if not isinstance(model_name, str) or not model_name.strip():
+            raise ValueError('Model MCP tool name must be a nonempty string.')
+        if model_name == 'web_search':
+            raise ValueError('MCP tool name conflicts with a built-in tool.')
+        if model_name in mapping:
+            raise ValueError('Duplicate model MCP tool name.')
+        permission = record.get('permission')
+        if not isinstance(permission, dict) or 'approval' not in permission:
+            raise ValueError('Model MCP tool requires an explicit saved approval policy.')
+        # Reuse the adapter's validation and canonical, server-scoped naming.
+        # This also reserves the mcp_ namespace and rejects substituted names.
+        normalized = model_tool_definitions([{
+            'server_id': record.get('server_id'), 'name': record.get('tool_name'),
+            'description': function.get('description'),
+            'inputSchema': function.get('parameters'), 'permission': permission}])[0]
+        if model_name != normalized['definition']['function']['name']:
+            raise ValueError('Model MCP tool name does not match its original identity.')
+        identity = (normalized['server_id'], normalized['tool_name'])
+        if identity in identities:
+            raise ValueError('Duplicate original MCP tool identity.')
+        identities.add(identity)
+        mapping[model_name] = {'server_id': identity[0], 'tool_name': identity[1],
+                               'approval': normalized['permission']['approval']}
+    return mapping
+
+
 def model_tool_definitions(eligible_records):
     """Adapt eligible records without registering or authorizing any tool.
 
