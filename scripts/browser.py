@@ -65,7 +65,7 @@ class Navigator:
         self.sections=['HOME','DATA','SSH','TERMINAL','INV','⚙️']
         self.inv_index=0
         self.settings_index=0
-        self.home_index=1
+        self.home_index=0
         self.dashboard=SystemDashboard()
         self.page='hosts'
         self.selected={}
@@ -507,7 +507,7 @@ class Navigator:
                 [('System volume',7),('Overlay sound volume',2)],
                 [('Section modifier: '+navigator_settings.section_modifier().title(),5)],
                 [('Configure network connections',8)],
-                [('Update',6)],
+                [('Update',6),('Force Restart Overlay',16)],
                 [('Connection settings',11),('Select LLM profile',15)],
                 [('Web search',12),('MCP Servers',14)],
             )
@@ -892,6 +892,19 @@ class Navigator:
                           '--command='+shlex.join(command)],env=env,start_new_session=True)
         self.message='Update window opened.'
 
+    def force_restart_overlay(self):
+        self.require_desktop()
+        choice=self.menu('FORCE RESTART OVERLAY',['Cancel','Restart Overlay'],
+                         detail='Closes all overlay terminal and SSH sessions, then relaunches the overlay.')
+        if choice!=1: return
+        env=dict(os.environ)
+        env.pop('FALLOUT_EMBEDDED_SOCKET',None)
+        env.pop('FALLOUT_SOUND_SOCKET',None)
+        subprocess.Popen(['/usr/bin/python3',str(Path(__file__).with_name('restart_overlay.py'))],
+                         env=env,start_new_session=True,stdin=subprocess.DEVNULL,
+                         stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+        self.message='Restarting overlay…'
+
     def font_settings(self):
         while True:
             size=navigator_settings.font_size()
@@ -1031,6 +1044,8 @@ class Navigator:
                 self.sessions.prune()
         elif page.startswith('settings_'):
             index=items[index]
+            if index==16:
+                self.force_restart_overlay(); return
             if index in (11,12,14,15):
                 from yes_man_ui import configure, configure_tools, mcp_servers_panel, select_profile
                 {11:configure,12:configure_tools,14:mcp_servers_panel,15:select_profile}[index](self)
