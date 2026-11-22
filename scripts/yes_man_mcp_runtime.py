@@ -7,8 +7,12 @@ import json
 from mcp_servers import validate_tool_permission
 
 
-def invoke_authorized_tool(model_tool_name, arguments, tool_mapping, context=None):
-    """Execute one currently Always Allow invocation, without retries.
+def invoke_authorized_tool(model_tool_name, arguments, tool_mapping, context=None,
+                           *, invocation_id=None, approval=None):
+    """Execute one currently permitted invocation, without retries.
+
+    Always Ask requires a trusted, exact single-use InvocationApproval. It is
+    consumed before transport construction and never restored after failure.
 
     Cancellation is cooperative between blocking transport operations. Each
     protocol operation uses the existing ten-second transport timeout; HTTP's
@@ -17,6 +21,7 @@ def invoke_authorized_tool(model_tool_name, arguments, tool_mapping, context=Non
     """
     from mcp_servers import load, validate_server
     from yes_man_request import RequestCancelled
+    from yes_man_mcp_authorization import InvocationApproval
     import sys
 
     transport = None
@@ -48,7 +53,7 @@ def invoke_authorized_tool(model_tool_name, arguments, tool_mapping, context=Non
             permission = validate_tool_permission(dict(
                 server['tool_permissions'].get(authorization['tool_name'], {}),
                 tool_name=authorization['tool_name']))
-            if not permission['enabled'] or permission['approval'] != 'always_allow':
+            if not permission['enabled'] or permission['approval'] != authorization['approval']:
                 raise ValueError
             return server
 
@@ -60,9 +65,15 @@ def invoke_authorized_tool(model_tool_name, arguments, tool_mapping, context=Non
         proposed = json.loads(json.dumps(arguments, allow_nan=False))
         mapping = deepcopy(tool_mapping)
         authorization = revalidate_tool_permission(model_tool_name, mapping)
-        if authorization['approval'] != 'always_allow':
+        if authorization['approval'] not in ('always_allow', 'always_ask'):
             raise ValueError
         server = saved_server(authorization)
+        checkpoint()
+        if authorization['approval'] == 'always_ask':
+            if not isinstance(approval, InvocationApproval):
+                raise ValueError
+            InvocationApproval.consume(approval, invocation_id, model_tool_name,
+                                       authorization['server_id'], authorization['tool_name'], proposed)
         checkpoint()
         transport = create_runtime_transport(server)
         checkpoint()
