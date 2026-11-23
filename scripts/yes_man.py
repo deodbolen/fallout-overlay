@@ -118,6 +118,110 @@ def endpoint(config):
     return base+('/chat/completions' if base.endswith('/v1') else '/v1/chat/completions')
 
 
+def prepare_mcp_conversation_continuation(conversation, assistant_message, tool_message, protocol):
+    """Return a deep-owned history list with one assistant call and tool result.
+
+    Pure preparation for an asynchronous caller: no GTK waits, threads, model
+    requests, or execution. Run in the caller's worker for large histories.
+    Inputs must be text-chat protocol messages; history is capped at 4096
+    messages/16 MiB and the formatted MCP result at 1 MiB. Original message
+    values are preserved, including denial/cancellation/error JSON content.
+    """
+    import re
+    from yes_man_mcp_authorization import _arguments_snapshot
+
+    try:
+        if protocol not in ('OpenAI compatible','Ollama'): raise ValueError
+        if not isinstance(conversation,list) or len(conversation)>4096: raise ValueError
+        history=deepcopy(conversation)
+        assistant=deepcopy(assistant_message)
+        tool=deepcopy(tool_message)
+
+        def pairs(items):
+            value={}
+            for key,item in items:
+                if key in value: raise ValueError
+                value[key]=item
+            return value
+
+        # Validate JSON compatibility and bound the complete snapshot without
+        # ever treating embedded tool text as instructions or local metadata.
+        size=0
+        for chunk in json.JSONEncoder(ensure_ascii=False,allow_nan=False).iterencode([history,assistant,tool]):
+            size+=len(chunk.encode('utf-8'))
+            if size>16*1024*1024: raise ValueError
+        pending={}; seen_ids=set()
+
+        def accept(row, current=False):
+            if not isinstance(row,dict): raise ValueError
+            role=row.get('role')
+            allowed={'role','content'}
+            if role=='assistant': allowed|={'tool_calls','thinking'}
+            elif role=='tool': allowed|=({'tool_name'} if protocol=='Ollama' else {'tool_call_id'})
+            elif role not in ('system','user'): raise ValueError
+            if set(row)-allowed: raise ValueError
+            content=row.get('content')
+            if not isinstance(content,str) and not (role=='assistant' and content is None): raise ValueError
+            if 'thinking' in row and not isinstance(row['thinking'],str): raise ValueError
+            if role=='tool':
+                key=row.get('tool_name' if protocol=='Ollama' else 'tool_call_id')
+                if not isinstance(key,str) or key not in pending: raise ValueError
+                del pending[key]
+                return
+            if pending: raise ValueError
+            if 'tool_calls' not in row:
+                if current: raise ValueError
+                return
+            calls=row['tool_calls']
+            if not isinstance(calls,list) or not calls or (current and len(calls)!=1): raise ValueError
+            for call in calls:
+                if not isinstance(call,dict) or set(call)-{'id','type','function'}: raise ValueError
+                if call.get('type','function')!='function': raise ValueError
+                function=call.get('function')
+                if not isinstance(function,dict) or set(function)-{'name','arguments','index'}: raise ValueError
+                name=function.get('name')
+                if not isinstance(name,str) or not name.strip(): raise ValueError
+                if current and not re.fullmatch(r'mcp_[a-z2-7]{52}',name): raise ValueError
+                arguments=function.get('arguments')
+                if isinstance(arguments,str): arguments=json.loads(arguments,object_pairs_hook=pairs)
+                _arguments_snapshot(arguments)
+                if 'id' in call:
+                    call_id=call['id']
+                    if not isinstance(call_id,str) or not call_id.strip() or call_id in seen_ids: raise ValueError
+                    seen_ids.add(call_id)
+                if protocol=='OpenAI compatible' and 'id' not in call: raise ValueError
+                key=name if protocol=='Ollama' else call['id']
+                if key in pending: raise ValueError
+                pending[key]=name
+
+        for row in history: accept(row)
+        if pending: raise ValueError
+        if not isinstance(assistant,dict) or assistant.get('role')!='assistant': raise ValueError
+        accept(assistant,current=True)
+        if not isinstance(tool,dict) or tool.get('role')!='tool': raise ValueError
+        name=assistant['tool_calls'][0]['function']['name']
+        if not isinstance(tool.get('content'),str) or len(tool['content'].encode('utf-8'))>1024*1024: raise ValueError
+        payload=json.loads(tool['content'],object_pairs_hook=pairs)
+        if not isinstance(payload,dict) or payload.get('untrusted') is not True: raise ValueError
+        status=payload.get('status')
+        if status not in ('success','denied','cancelled','error'): raise ValueError
+        outcome={'status':status,'call_index':0,'model_tool_name':name}
+        if protocol=='OpenAI compatible': outcome['tool_call_id']=tool.get('tool_call_id')
+        if 'result' in payload:
+            if set(payload)!={'status','untrusted','result'}: raise ValueError
+            outcome.update(status='success',invocation_id='continuation-validation',result=payload['result'])
+        else:
+            if set(payload)!={'status','untrusted','error'} or status=='success': raise ValueError
+        canonical=format_mcp_tool_result(outcome,protocol)
+        if json.dumps(json.loads(canonical['content']),sort_keys=True,allow_nan=False)!=json.dumps(payload,sort_keys=True,allow_nan=False):
+            raise ValueError
+        accept(tool)
+        if pending: raise ValueError
+        return history+[assistant,tool]
+    except Exception:
+        raise ValueError('Invalid or inconsistent MCP conversation continuation.') from None
+
+
 def handle_mcp_tool_response(message, tool_mapping, protocol, dialog, context, on_complete):
     """Route exactly one MCP-only response without changing the live chat loop.
 
