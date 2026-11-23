@@ -444,11 +444,18 @@ def _completion(config,messages,tools=False,tool_definitions=None,*,mcp_snapshot
     except (KeyError,IndexError,TypeError,json.JSONDecodeError): raise ValueError('Unexpected server response. Check the server type and model.') from None
 
 
-def reply(config,messages,context:RequestContext=None):
-    """Generate a reply, checking optional cancellation between operations."""
+def reply(config,messages,context:RequestContext=None,*,discovered_by_server=None):
+    """Generate a reply, checking optional cancellation between operations.
+
+    discovered_by_server optionally supplies trusted, previously discovered MCP
+    metadata keyed by saved server ID. Missing data preserves legacy behavior.
+    Nonempty eligible MCP definitions remain gated until this loop has dedicated
+    MCP response handling instead of dispatching every call through ToolRegistry.
+    """
     config=validate(config)
     enabled=config['search_enabled']
     sources=[]; page_cache={}
+    discovered=deepcopy(discovered_by_server) if discovered_by_server is not None else None
     registry=ToolRegistry()
     if enabled:
         from yes_man_search import TOOL
@@ -468,7 +475,16 @@ def reply(config,messages,context:RequestContext=None):
     calls_used=0
     for turn in range(4):
         if context is not None: context.raise_if_cancelled()
-        message=_completion(config,conversation,tool_definitions=registry.definitions())
+        mcp_snapshot=None
+        if discovered is not None:
+            from yes_man_mcp_runtime import prepare_conversation_mcp_tools
+            # Rebuild from current saved permissions for this exact completion;
+            # retain its mapping separately from model-visible definitions.
+            mcp_snapshot=prepare_conversation_mcp_tools(registry,discovered)
+            if mcp_snapshot['definitions']:
+                raise ValueError('Live MCP advertisement is unavailable until dedicated MCP response handling is integrated.')
+        if context is not None: context.raise_if_cancelled()
+        message=_completion(config,conversation,tool_definitions=registry.definitions(),mcp_snapshot=mcp_snapshot)
         if context is not None: context.raise_if_cancelled()
         calls=message.get('tool_calls')
         if not calls:
