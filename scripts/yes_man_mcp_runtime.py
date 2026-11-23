@@ -7,6 +7,46 @@ import json
 from mcp_servers import validate_tool_permission
 
 
+def stage_mcp_tool_definitions(model_records, registry):
+    """Stage trusted model_tool_definitions() records without executable handlers.
+
+    Return {'definitions': [function-tool envelopes], 'tool_mapping': bindings}.
+    The supplied conversation-local ToolRegistry is inspected, never modified.
+    Current permissions must match the staged policies; callers must rebuild
+    stale records. This snapshot is not execution authorization and is not
+    automatically advertised to a model or installed in any registry.
+    """
+    from yes_man_tools import ToolRegistry
+
+    try:
+        if not isinstance(registry, ToolRegistry):
+            raise ValueError
+        records = deepcopy(model_records)
+        mapping = build_tool_mapping(records)
+        existing = registry.definitions()
+        names = [definition['function']['name'] for definition in existing]
+        if len(names) != len(set(names)):
+            raise ValueError
+        if set(mapping).intersection(set(names) | {'web_search'}):
+            raise ValueError
+        # Reconstruct only the canonical envelope, discarding arbitrary outer
+        # metadata so no connection configuration is forwarded to a model.
+        canonical = model_tool_definitions([{
+            'server_id': record['server_id'], 'name': record['tool_name'],
+            'description': record['definition']['function']['description'],
+            'inputSchema': record['definition']['function']['parameters'],
+            'permission': record['permission']} for record in records])
+        if build_tool_mapping(canonical) != mapping:
+            raise ValueError
+        for name, binding in mapping.items():
+            if revalidate_tool_permission(name, mapping) != binding:
+                raise ValueError
+        return {'definitions': [record['definition'] for record in canonical],
+                'tool_mapping': mapping}
+    except Exception:
+        raise ValueError('MCP tool definitions could not be staged consistently.') from None
+
+
 def coordinate_tool_invocation(model_tool_name, arguments, tool_mapping, dialog,
                                 context, on_complete):
     """Coordinate one trusted invocation asynchronously; return its fresh ID.
