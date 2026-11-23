@@ -118,6 +118,82 @@ def endpoint(config):
     return base+('/chat/completions' if base.endswith('/v1') else '/v1/chat/completions')
 
 
+def route_identified_mcp_call(identified_call, tool_mapping, dialog, context, on_complete):
+    """Route one validated identified record, outside the live conversation loop.
+
+    Return the coordinator invocation ID, or None on routing validation failure.
+    on_complete(outcome) runs at most once on the GTK main loop. It receives
+    the coordinator status/invocation_id and result (success) or sanitized error,
+    plus call_index, model_tool_name, and optional tool_call_id for valid input.
+    Malformed input completes asynchronously as error without calling dispatch.
+    """
+    import threading
+    from gi.repository import GLib
+    from yes_man_mcp_runtime import coordinate_tool_invocation
+    from yes_man_mcp_authorization import _arguments_snapshot
+    from yes_man_request import RequestCancelled
+
+    if not callable(on_complete):
+        raise ValueError('MCP routing completion callback must be callable.')
+    lock=threading.Lock()
+    completed=False
+    correlation={}
+
+    def relay(outcome):
+        nonlocal completed
+        with lock:
+            if completed: return
+            completed=True
+        safe={'status':'error','error':'MCP call could not be routed or completed.'}
+        try:
+            if not isinstance(outcome,dict) or outcome.get('status') not in ('success','denied','cancelled','error'):
+                raise ValueError
+            safe={'status':outcome['status']}
+            if 'invocation_id' in outcome:
+                if not isinstance(outcome['invocation_id'],str) or not outcome['invocation_id']: raise ValueError
+                safe['invocation_id']=outcome['invocation_id']
+            if safe['status']=='success': safe['result']=deepcopy(outcome['result'])
+            elif safe['status']=='error': safe['error']='MCP call could not be routed or completed.'
+        except Exception:
+            safe={'status':'error','error':'MCP call could not be routed or completed.'}
+        safe.update(correlation)
+        def deliver():
+            on_complete(safe)
+            return False
+        GLib.idle_add(deliver)
+
+    try:
+        record=deepcopy(identified_call)
+        mapping=deepcopy(tool_mapping)
+        required={'call_index','model_tool_name','trusted_identity','arguments'}
+        if not isinstance(record,dict) or not required<=set(record) or set(record)-required-{'tool_call_id'}:
+            raise ValueError
+        if type(record['call_index']) is not int or record['call_index']<0: raise ValueError
+        arguments=json.loads(_arguments_snapshot(record['arguments']))
+        call={'type':'function','function':{'name':record['model_tool_name'],'arguments':arguments}}
+        if 'tool_call_id' in record: call['id']=record['tool_call_id']
+        recognized=identify_mcp_tool_calls({'tool_calls':[call]},mapping)
+        if len(recognized)!=1: raise ValueError
+        expected=recognized[0]
+        expected['call_index']=record['call_index']
+        if expected!=record: raise ValueError
+        correlation.update(call_index=record['call_index'],model_tool_name=record['model_tool_name'])
+        if 'tool_call_id' in record: correlation['tool_call_id']=record['tool_call_id']
+        if context is not None: context.raise_if_cancelled()
+    except RequestCancelled:
+        relay({'status':'cancelled'})
+        return None
+    except Exception:
+        relay({'status':'error'})
+        return None
+    try:
+        return coordinate_tool_invocation(record['model_tool_name'],arguments,mapping,
+                                          dialog,context,relay)
+    except Exception:
+        relay({'status':'error'})
+        return None
+
+
 def identify_mcp_tool_calls(message, tool_mapping):
     """Identify, never execute, calls against the exact trusted request mapping.
 
