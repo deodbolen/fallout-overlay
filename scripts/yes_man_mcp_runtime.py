@@ -7,6 +7,133 @@ import json
 from mcp_servers import validate_tool_permission
 
 
+def coordinate_tool_invocation(model_tool_name, arguments, tool_mapping, dialog,
+                                context, on_complete):
+    """Coordinate one trusted invocation asynchronously; return its fresh ID.
+
+    on_complete(outcome) runs once on the GTK main loop. Outcomes contain
+    invocation_id and status (success, denied, cancelled, error), plus result
+    on success or a fixed error message on error. The caller owns context;
+    cancellation cannot interrupt an already-blocking transport operation.
+    """
+    import threading
+    import uuid
+    from gi.repository import GLib
+    from yes_man_request import RequestContext, RequestCancelled
+    from yes_man_mcp_authorization import InvocationApproval, _arguments_snapshot
+    from yes_man_mcp_approval import request_invocation_approval
+
+    if not callable(on_complete):
+        raise ValueError('Invocation completion callback must be callable.')
+    invocation_id = uuid.uuid4().hex
+    request_context = context if context is not None else RequestContext()
+    lock = threading.Lock()
+    state = {'completed': False, 'attempted': False, 'approval_handled': False}
+
+    def complete(status, result=None):
+        with lock:
+            if state['completed']:
+                return
+            state['completed'] = True
+        def deliver():
+            outcome = {'invocation_id': invocation_id, 'status': status}
+            try:
+                if request_context.is_cancelled():
+                    outcome['status'] = 'cancelled'
+            except Exception:
+                outcome['status'] = 'error'
+            if outcome['status'] == 'success':
+                outcome['result'] = result
+            elif outcome['status'] == 'error':
+                outcome['error'] = 'MCP invocation could not be completed or authorized.'
+            on_complete(outcome)
+            return False
+        GLib.idle_add(deliver)
+
+    try:
+        # Copy before handing control to workers or an asynchronous dialog.
+        proposed = json.loads(_arguments_snapshot(arguments))
+        mapping = deepcopy(tool_mapping)
+    except Exception:
+        complete('error')
+        return invocation_id
+
+    def execute(authorization, approval=None):
+        with lock:
+            if state['completed'] or state['attempted']:
+                return
+            state['attempted'] = True
+        try:
+            request_context.raise_if_cancelled()
+            # Reject policy switches while the user was considering approval;
+            # the dispatcher performs another check and checks after initialize.
+            if revalidate_tool_permission(model_tool_name, mapping) != authorization:
+                raise ValueError
+            result = invoke_authorized_tool(model_tool_name, proposed, mapping,
+                                            context=request_context,
+                                            invocation_id=invocation_id, approval=approval)
+            complete('success', result)
+        except RequestCancelled:
+            complete('cancelled')
+        except Exception:
+            complete('error')
+
+    def start_worker(work):
+        try:
+            threading.Thread(target=work, daemon=True).start()
+        except Exception:
+            complete('error')
+
+    def prepare():
+        try:
+            request_context.raise_if_cancelled()
+            authorization = revalidate_tool_permission(model_tool_name, mapping)
+            if authorization['approval'] == 'always_allow':
+                execute(authorization)
+                return
+            if authorization['approval'] != 'always_ask':
+                raise ValueError
+            approval = InvocationApproval(invocation_id, model_tool_name,
+                                          authorization['server_id'],
+                                          authorization['tool_name'], proposed)
+            # Names are display-only; resolve the server label from local
+            # storage, never from model arguments or tool-provided metadata.
+            from mcp_servers import load, validate_server
+            server = next(validate_server(row) for row in load()['servers']
+                          if row.get('id') == authorization['server_id'])
+
+            def resolved(returned, approved):
+                with lock:
+                    if state['approval_handled'] or state['completed']:
+                        return
+                    state['approval_handled'] = True
+                try:
+                    request_context.raise_if_cancelled()
+                    if returned is not approval or approved is not True or approval.state != 'approved':
+                        approval.cancel()
+                        complete('denied')
+                        return
+                    start_worker(lambda: execute(authorization, approval))
+                except RequestCancelled:
+                    approval.cancel()
+                    complete('cancelled')
+                except Exception:
+                    approval.cancel()
+                    complete('error')
+
+            request_invocation_approval(dialog, approval,
+                                        display_name=authorization['tool_name'],
+                                        server_name=server['name'], on_complete=resolved,
+                                        context=request_context)
+        except RequestCancelled:
+            complete('cancelled')
+        except Exception:
+            complete('error')
+
+    start_worker(prepare)
+    return invocation_id
+
+
 def invoke_authorized_tool(model_tool_name, arguments, tool_mapping, context=None,
                            *, invocation_id=None, approval=None):
     """Execute one currently permitted invocation, without retries.
