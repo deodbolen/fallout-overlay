@@ -118,6 +118,98 @@ def endpoint(config):
     return base+('/chat/completions' if base.endswith('/v1') else '/v1/chat/completions')
 
 
+def format_mcp_tool_result(outcome, protocol):
+    """Return a role=tool message containing bounded JSON, never instructions.
+
+    OpenAI compatible adds tool_call_id; Ollama adds tool_name. Content is
+    {status, untrusted: true, result: {content, structuredContent?, isError?}}
+    for completed MCP responses, or {status, untrusted: true, error} otherwise.
+    An MCP isError=true response is represented as status=error. Both input and
+    serialized content are limited to 1 MiB UTF-8; no truncation invents results.
+    Local identities, permissions, transport metadata, and raw errors are omitted.
+    """
+    import re
+
+    try:
+        if protocol not in ('OpenAI compatible','Ollama') or not isinstance(outcome,dict): raise ValueError
+        allowed={'status','invocation_id','result','error','call_index','model_tool_name','tool_call_id'}
+        if set(outcome)-allowed: raise ValueError
+
+        def validate_json(value):
+            if type(value) is dict:
+                if any(type(key) is not str for key in value): raise ValueError
+                for item in value.values(): validate_json(item)
+            elif type(value) is list:
+                for item in value: validate_json(item)
+            elif value is not None and type(value) not in (str,bool,int,float): raise ValueError
+
+        def serialize(value):
+            validate_json(value)
+            chunks=[]; size=0
+            encoder=json.JSONEncoder(ensure_ascii=False,allow_nan=False,separators=(',',':'))
+            for chunk in encoder.iterencode(value):
+                size+=len(chunk.encode('utf-8'))
+                if size>1024*1024: raise ValueError
+                chunks.append(chunk)
+            return ''.join(chunks)
+
+        serialize(outcome)
+        status=outcome.get('status')
+        if status not in ('success','denied','cancelled','error'): raise ValueError
+        if type(outcome.get('call_index')) is not int or outcome['call_index']<0: raise ValueError
+        name=outcome.get('model_tool_name')
+        if not isinstance(name,str) or not re.fullmatch(r'mcp_[a-z2-7]{52}',name): raise ValueError
+        for field in ('tool_call_id','invocation_id'):
+            if field in outcome and (not isinstance(outcome[field],str) or not outcome[field].strip() or len(outcome[field])>1024):
+                raise ValueError
+        if protocol=='OpenAI compatible' and 'tool_call_id' not in outcome: raise ValueError
+        payload={'status':status,'untrusted':True}
+        if status=='success':
+            if 'error' in outcome or 'invocation_id' not in outcome: raise ValueError
+            result=outcome.get('result')
+            if not isinstance(result,dict) or not isinstance(result.get('content'),list): raise ValueError
+            if 'isError' in result and type(result['isError']) is not bool: raise ValueError
+            if 'structuredContent' in result and not isinstance(result['structuredContent'],dict): raise ValueError
+            content=[]
+            for block in result['content']:
+                if not isinstance(block,dict): raise ValueError
+                kind=block.get('type')
+                if kind=='text':
+                    if not isinstance(block.get('text'),str): raise ValueError
+                    fields=('type','text')
+                elif kind in ('image','audio'):
+                    if not isinstance(block.get('data'),str) or not isinstance(block.get('mimeType'),str): raise ValueError
+                    fields=('type','data','mimeType')
+                elif kind=='resource':
+                    resource=block.get('resource')
+                    if not isinstance(resource,dict) or not isinstance(resource.get('uri'),str): raise ValueError
+                    if not isinstance(resource.get('text',resource.get('blob')),str): raise ValueError
+                    fields=('type',)
+                elif kind=='resource_link':
+                    if not isinstance(block.get('uri'),str) or not isinstance(block.get('name'),str): raise ValueError
+                    fields=('type','uri','name','description','mimeType','size','title')
+                else: raise ValueError
+                cleaned={key:deepcopy(block[key]) for key in fields if key in block}
+                if kind=='resource':
+                    cleaned['resource']={key:deepcopy(resource[key]) for key in ('uri','mimeType','text','blob') if key in resource}
+                content.append(cleaned)
+            payload['result']={key:deepcopy(result[key]) for key in ('content','structuredContent','isError') if key in result}
+            payload['result']['content']=content
+            if result.get('isError') is True: payload['status']='error'
+        else:
+            if 'result' in outcome: raise ValueError
+            if 'error' in outcome and (status!='error' or not isinstance(outcome['error'],str)): raise ValueError
+            payload['error']={'denied':'Invocation denied; the tool was not executed.',
+                              'cancelled':'Invocation cancelled; execution may already have started.',
+                              'error':'MCP invocation failed; execution outcome may be unknown.'}[status]
+        message={'role':'tool','content':serialize(payload)}
+        if protocol=='Ollama': message['tool_name']=name
+        else: message['tool_call_id']=outcome['tool_call_id']
+        return message
+    except Exception:
+        raise ValueError('Invalid or oversized MCP routing outcome for this protocol.') from None
+
+
 def route_identified_mcp_call(identified_call, tool_mapping, dialog, context, on_complete):
     """Route one validated identified record, outside the live conversation loop.
 
