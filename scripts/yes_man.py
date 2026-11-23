@@ -118,6 +118,68 @@ def endpoint(config):
     return base+('/chat/completions' if base.endswith('/v1') else '/v1/chat/completions')
 
 
+def identify_mcp_tool_calls(message, tool_mapping):
+    """Identify, never execute, calls against the exact trusted request mapping.
+
+    Return ordered records with call_index, model_tool_name, arguments (a new
+    JSON object), and trusted_identity {server_id, tool_name, approval}. Include
+    tool_call_id only when supplied by the model. Ollama may omit ID/type;
+    explicit types must be function. Unknown/built-in calls are not returned.
+    Invalid structures and duplicate IDs (including non-MCP calls) fail closed.
+    No configuration is read and cached approval is not execution authority.
+    """
+    from yes_man_mcp_runtime import build_tool_mapping, model_tool_definitions
+    from yes_man_mcp_authorization import _arguments_snapshot
+
+    try:
+        if not isinstance(message,dict) or not isinstance(tool_mapping,dict): raise ValueError
+        mapping=deepcopy(tool_mapping)
+        records=[]
+        for name,binding in mapping.items():
+            if not isinstance(binding,dict) or set(binding)!={'server_id','tool_name','approval'}: raise ValueError
+            records.append({'server_id':binding['server_id'],'name':binding['tool_name'],
+                            'description':'Identity validation','inputSchema':{'type':'object'},
+                            'permission':{'tool_name':binding['tool_name'],'enabled':True,
+                                          'approval':binding['approval']}})
+        canonical=build_tool_mapping(model_tool_definitions(records))
+        if canonical!=mapping: raise ValueError
+        calls=message.get('tool_calls')
+        if calls is None: return []
+        if not isinstance(calls,list): raise ValueError
+        ids=set(); result=[]
+
+        def object_pairs(pairs):
+            value={}
+            for key,item in pairs:
+                if key in value: raise ValueError
+                value[key]=item
+            return value
+
+        for index,call in enumerate(calls):
+            if not isinstance(call,dict) or call.get('type','function')!='function': raise ValueError
+            function=call.get('function')
+            if not isinstance(function,dict): raise ValueError
+            name=function.get('name')
+            if not isinstance(name,str) or not name.strip(): raise ValueError
+            if 'id' in call:
+                call_id=call['id']
+                if not isinstance(call_id,str) or not call_id.strip() or call_id in ids: raise ValueError
+                ids.add(call_id)
+            if name not in mapping: continue
+            if 'arguments' not in function: raise ValueError
+            arguments=function['arguments']
+            if isinstance(arguments,str):
+                arguments=json.loads(arguments,object_pairs_hook=object_pairs)
+            snapshot=json.loads(_arguments_snapshot(arguments))
+            identified={'call_index':index,'model_tool_name':name,
+                        'trusted_identity':dict(mapping[name]),'arguments':snapshot}
+            if 'id' in call: identified['tool_call_id']=call['id']
+            result.append(identified)
+        return result
+    except Exception:
+        raise ValueError('Invalid MCP tool calls or trusted request mapping.') from None
+
+
 def compose_tool_definitions(tool_definitions, mcp_snapshot=None):
     """Return request-local definitions and a separate, non-executable mapping.
 
