@@ -7,6 +7,51 @@ import json
 from mcp_servers import validate_tool_permission
 
 
+def prepare_conversation_mcp_tools(registry, discovered_by_server):
+    """Prepare a fresh non-executable MCP snapshot for one conversation request.
+
+    discovered_by_server is a trusted application-owned dict mapping exact saved
+    server IDs to tools/list metadata lists: [{name, description, inputSchema}].
+    No live discovery occurs. Unknown IDs, duplicate saved IDs, malformed tools,
+    and stale permissions fail closed. Servers and tools are sorted by exact ID
+    and name so equivalent inputs produce the same ordering. The result has
+    exactly definitions and tool_mapping; it is not execution authority.
+    """
+    from mcp_servers import load, validate_server
+    from yes_man_tools import ToolRegistry
+
+    try:
+        if not isinstance(registry, ToolRegistry) or not isinstance(discovered_by_server, dict):
+            raise ValueError
+        discovered = deepcopy(discovered_by_server)
+        if any(not isinstance(key, str) or not key.strip() for key in discovered):
+            raise ValueError
+        servers = {}
+        for record in load()['servers']:
+            server = validate_server(record)
+            if server['id'] in servers:
+                raise ValueError
+            servers[server['id']] = server
+        if set(discovered) - set(servers):
+            raise ValueError
+        eligible = []
+        for server_id in sorted(discovered):
+            server = servers[server_id]
+            tools = discovered[server_id]
+            # Validate discovery independently of authorization, even for a
+            # disabled server. This temporary copy grants no tool permissions.
+            validation_server = dict(server, enabled=True, tool_permissions={})
+            eligible_tools(validation_server, tools)
+            for tool in tools:
+                json.dumps(tool['inputSchema'], allow_nan=False)
+            if server['enabled']:
+                eligible.extend(eligible_tools(server, sorted(tools, key=lambda tool: tool['name'])))
+        records = model_tool_definitions(eligible)
+        return stage_mcp_tool_definitions(records, registry)
+    except Exception:
+        raise ValueError('Conversation MCP tools could not be prepared consistently.') from None
+
+
 def stage_mcp_tool_definitions(model_records, registry):
     """Stage trusted model_tool_definitions() records without executable handlers.
 
