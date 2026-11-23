@@ -9,6 +9,89 @@ gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk, GLib
 
 
+def request_invocation_approval(dialog, approval, *, display_name, server_name,
+                                on_complete, context=None):
+    """Asynchronously resolve a trusted InvocationApproval using an existing UI.
+
+    on_complete(approval, approved) runs once on the GTK main loop; the approval
+    is never consumed. Only pending objects may be submitted, once per object.
+    Identity and original arguments come exclusively from the approval object;
+    display_name and server_name are trusted display labels, not authorization.
+    Returns None immediately. Invalid API usage raises ValueError.
+    """
+    from yes_man_mcp_authorization import InvocationApproval
+
+    if (not isinstance(approval, InvocationApproval) or
+            not isinstance(dialog, ToolApprovalDialog) or not callable(on_complete)):
+        raise ValueError('Expected trusted approval, dialog, and completion callback.')
+    # This module is a trusted application peer of InvocationApproval. Read its
+    # private immutable snapshot under its lock; never reconstruct it from UI.
+    with approval._lock:
+        if approval._state != 'pending' or getattr(approval, '_dialog_bridge_claimed', False):
+            raise ValueError('Approval is not available for a new dialog request.')
+        approval._dialog_bridge_claimed = True
+        invocation_id, _, server_id, tool_name = approval._identity
+        original_arguments = approval._arguments
+    finished = False
+    finish_lock = threading.Lock()
+
+    class Cancellation:
+        def is_cancelled(self):
+            try:
+                return (approval.state != 'pending' or
+                        (context is not None and context.is_cancelled()))
+            except Exception:
+                return True
+
+    cancellation = Cancellation()
+
+    def resolve(callback_id, approved):
+        nonlocal finished
+        with finish_lock:
+            if finished:
+                return False
+            finished = True
+        decision = (callback_id == invocation_id and approved is True and
+                    not cancellation.is_cancelled())
+        try:
+            approval.record_decision(decision)
+        except Exception:
+            approval.cancel()
+            decision = False
+        try:
+            if context is not None and context.is_cancelled():
+                approval.cancel()
+                decision = False
+        except Exception:
+            approval.cancel()
+            decision = False
+        decision = decision and approval.state == 'approved'
+        on_complete(approval, decision)
+        return False
+
+    def completed(callback_id, approved):
+        # Never finalize inline, even if a dialog implementation calls back
+        # synchronously on failure. Duplicate callbacks cannot overwrite state.
+        GLib.idle_add(resolve, callback_id, approved)
+
+    def present():
+        try:
+            if cancellation.is_cancelled():
+                completed(invocation_id, False)
+                return False
+            accepted = dialog.request(invocation_id, display_name, server_id,
+                                      server_name, tool_name,
+                                      json.loads(original_arguments), completed,
+                                      context=cancellation)
+            if not accepted:
+                completed(invocation_id, False)
+        except Exception:
+            completed(invocation_id, False)
+        return False
+
+    GLib.idle_add(present)
+
+
 class ToolApprovalDialog:
     """Own at most one invocation. Callbacks receive (invocation_id, approved).
 
