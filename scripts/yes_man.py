@@ -118,6 +118,68 @@ def endpoint(config):
     return base+('/chat/completions' if base.endswith('/v1') else '/v1/chat/completions')
 
 
+def handle_mcp_tool_response(message, tool_mapping, protocol, dialog, context, on_complete):
+    """Route exactly one MCP-only response without changing the live chat loop.
+
+    Return the coordinator invocation ID when available, otherwise None.
+    on_complete receives {ok: True, tool_message: <formatted role=tool message>}
+    or {ok: False, error: <fixed sanitized message>}, always through GLib.
+    ok describes formatting/bridge success, not execution: denied, cancelled,
+    and tool errors remain explicit in the formatted message's JSON content.
+    Requires a running GTK main loop; cancellation of blocking HTTP remains
+    cooperative. No retries or alternative execution paths are introduced.
+    """
+    import threading
+    from gi.repository import GLib
+
+    if not callable(on_complete):
+        raise ValueError('MCP response completion callback must be callable.')
+    lock=threading.Lock()
+    completed=False
+    failure={'ok':False,'error':'MCP response could not be handled or formatted.'}
+
+    def finish(outcome=None):
+        nonlocal completed
+        with lock:
+            if completed: return
+            completed=True
+        response=dict(failure)
+        if outcome is not None:
+            try:
+                # A routing result must still correlate to this exact response.
+                if not isinstance(outcome,dict): raise ValueError
+                for key in ('call_index','model_tool_name'):
+                    if outcome.get(key)!=identified[key]: raise ValueError
+                if ('tool_call_id' in outcome)!=('tool_call_id' in identified): raise ValueError
+                if outcome.get('tool_call_id')!=identified.get('tool_call_id'): raise ValueError
+                formatted=format_mcp_tool_result(outcome,protocol)
+                response={'ok':True,'tool_message':formatted}
+            except Exception:
+                response=dict(failure)
+        def deliver():
+            on_complete(response)
+            return False
+        GLib.idle_add(deliver)
+
+    try:
+        if protocol not in ('OpenAI compatible','Ollama'): raise ValueError
+        snapshot=deepcopy(message)
+        mapping=deepcopy(tool_mapping)
+        calls=identify_mcp_tool_calls(snapshot,mapping)
+        if len(calls)!=1 or len(snapshot.get('tool_calls',[]))!=1: raise ValueError
+        identified=calls[0]
+        if protocol=='OpenAI compatible' and 'tool_call_id' not in identified: raise ValueError
+        if 'tool_call_id' in identified and len(identified['tool_call_id'])>1024: raise ValueError
+    except Exception:
+        finish()
+        return None
+    try:
+        return route_identified_mcp_call(identified,mapping,dialog,context,finish)
+    except Exception:
+        finish()
+        return None
+
+
 def format_mcp_tool_result(outcome, protocol):
     """Return a role=tool message containing bounded JSON, never instructions.
 
