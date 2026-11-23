@@ -1,5 +1,6 @@
 """Yes Man server configuration and plain chat transport."""
 import json
+from copy import deepcopy
 import ssl
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -117,7 +118,56 @@ def endpoint(config):
     return base+('/chat/completions' if base.endswith('/v1') else '/v1/chat/completions')
 
 
-def _completion(config,messages,tools=False,tool_definitions=None):
+def compose_tool_definitions(tool_definitions, mcp_snapshot=None):
+    """Return request-local definitions and a separate, non-executable mapping.
+
+    mcp_snapshot is an explicitly supplied preparation/staging result containing
+    exactly definitions and tool_mapping. No configuration or discovery is read.
+    Only the returned definitions may be sent to a model.
+    """
+    from yes_man_mcp_runtime import build_tool_mapping
+
+    try:
+        definitions=deepcopy(tool_definitions)
+        if not isinstance(definitions,list): raise ValueError
+        names=set()
+        for definition in definitions:
+            if not isinstance(definition,dict) or definition.get('type')!='function': raise ValueError
+            function=definition.get('function')
+            if not isinstance(function,dict): raise ValueError
+            name=function.get('name')
+            if not isinstance(name,str) or not name.strip() or name in names: raise ValueError
+            if not isinstance(function.get('description'),str) or not function['description'].strip(): raise ValueError
+            if not isinstance(function.get('parameters'),dict) or function['parameters'].get('type')!='object': raise ValueError
+            names.add(name)
+        if mcp_snapshot is None: return {'definitions':definitions,'tool_mapping':{}}
+        snapshot=deepcopy(mcp_snapshot)
+        if not isinstance(snapshot,dict) or set(snapshot)!={'definitions','tool_mapping'}: raise ValueError
+        staged=snapshot['definitions']; mapping=snapshot['tool_mapping']
+        if not isinstance(staged,list) or not isinstance(mapping,dict): raise ValueError
+        records=[]
+        for definition in staged:
+            # Reject additional metadata rather than leaking local identities
+            # or permission fields through a model-visible envelope.
+            if not isinstance(definition,dict) or set(definition)!={'type','function'}: raise ValueError
+            function=definition['function']
+            if not isinstance(function,dict) or set(function)!={'name','description','parameters'}: raise ValueError
+            name=function['name']
+            if not isinstance(name,str) or name in names or name=='web_search': raise ValueError
+            binding=mapping.get(name)
+            if not isinstance(binding,dict) or set(binding)!={'server_id','tool_name','approval'}: raise ValueError
+            records.append({'definition':definition,'server_id':binding['server_id'],
+                            'tool_name':binding['tool_name'],'permission':{
+                                'tool_name':binding['tool_name'],'enabled':True,'approval':binding['approval']}})
+            names.add(name)
+        if build_tool_mapping(records)!=mapping: raise ValueError
+        json.dumps(staged,allow_nan=False)
+        return {'definitions':definitions+staged,'tool_mapping':mapping}
+    except Exception:
+        raise ValueError('Inconsistent request-local tool definitions or MCP snapshot.') from None
+
+
+def _completion(config,messages,tools=False,tool_definitions=None,*,mcp_snapshot=None):
     config=validate(config)
     target=endpoint(config)
     ollama=config['protocol']=='Ollama'
@@ -128,6 +178,9 @@ def _completion(config,messages,tools=False,tool_definitions=None):
     elif tools:
         from yes_man_search import TOOL
         payload['tools']=[TOOL]
+    if mcp_snapshot is not None:
+        composed=compose_tool_definitions(payload.get('tools',[]),mcp_snapshot)
+        if composed['definitions']: payload['tools']=composed['definitions']
     headers={'Content-Type':'application/json','Accept':'application/json'}
     if config['api_key']: headers['Authorization']='Bearer '+config['api_key']
     request=Request(target,data=json.dumps(payload).encode(),headers=headers,method='POST')
